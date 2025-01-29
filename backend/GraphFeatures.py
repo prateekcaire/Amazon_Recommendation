@@ -1,5 +1,6 @@
 import os
 import pickle
+import random
 
 import numpy as np
 import pandas as pd
@@ -164,9 +165,9 @@ class FeatureGenerator:
             if product_id not in product_features:
                 # Handle price conversion safely
                 try:
-                    price = float(meta['price']) if meta['price'] and meta['price'] != 'None' else 0.0
+                    price = float(meta['price']) if meta['price'] and meta['price'] != 'None' else round(random.uniform(5.0, 20.0), 2)
                 except (ValueError, TypeError):
-                    price = 0.0
+                    price = round(random.uniform(5.0, 20.0), 2)
 
                 # Handle rating conversion safely
                 try:

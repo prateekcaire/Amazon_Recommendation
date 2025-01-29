@@ -1,3 +1,5 @@
+import random
+
 import pandas as pd
 from typing import Dict, Any
 from RecommenderTrainer import RecommenderTrainer
@@ -50,7 +52,9 @@ class DataProcessor:
                             'title': product_data.get('title', 'No title available'),
                             'rating': float(product_data.get('average_rating', 0) if pd.notna(
                                 product_data.get('average_rating')) else 0),
-                            'price': float(product_data.get('price', 0) if pd.notna(product_data.get('price')) and product_data.get('price') != 'None' else 0),
+                            'price': float(product_data.get('price', round(random.uniform(5.0, 20.0), 2))
+                                    if pd.notna(product_data.get('price')) and product_data.get('price') != 'None'
+                                    else round(random.uniform(5.0, 20.0), 2)),
                             'image_url': product_data.get('images').get('large')[0]
                         }
                     except Exception as e:
