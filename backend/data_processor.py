@@ -80,7 +80,7 @@ class DataProcessor:
     def get_recommendations_with_metadata(self, user_id: int) -> Dict[str, Any]:
         """Get recommendations and corresponding metadata"""
         # Get recommendations
-        recommendations = self.trainer.generate_recommendations(user_id, num_categories=2)
+        recommendations = self.trainer.generate_recommendations(user_id, num_categories=9)
         # Get metadata
         metadata = self.get_metadata()
 

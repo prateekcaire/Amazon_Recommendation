@@ -13,7 +13,7 @@ def train_and_save_model():
     )
 
     print("Preparing data...")
-    trainer.prepare_data(batch_size=32, max_samples=1000)
+    trainer.prepare_data(batch_size=32, max_samples=10000)
 
     print("Training model...")
     trainer.train(num_epochs=100)  # Use full training regime

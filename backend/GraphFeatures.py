@@ -13,7 +13,7 @@ import torch.nn.functional as F
 
 
 class FeatureGenerator:
-    def __init__(self, batch_size: int = 32, max_samples: int = 1000):
+    def __init__(self, batch_size: int = 32, max_samples: int = 10000):
         # Original initialization
         self.batch_size = batch_size
         self.max_samples = max_samples
@@ -66,7 +66,7 @@ class FeatureGenerator:
                     trust_remote_code=True,
                     cache_dir=cache_dir
                 )
-                for c in meta_configs[:1]
+                for c in meta_configs[:6]
             ]).select(range(self.max_samples))
 
             # Load and process review dataset
@@ -78,7 +78,7 @@ class FeatureGenerator:
                     trust_remote_code=True,
                     cache_dir=cache_dir
                 )
-                for c in review_configs[:1]
+                for c in review_configs[:6]
             ]).select(range(self.max_samples))
 
             # Save processed datasets to cache

@@ -1,4 +1,5 @@
 # Updated api.py
+import traceback
 
 from flask import Flask, jsonify
 from RecommenderTrainer import RecommenderTrainer
@@ -16,7 +17,7 @@ trainer = RecommenderTrainer(
 )
 
 # Prepare data without training
-trainer.prepare_data(batch_size=32, max_samples=1000)
+trainer.prepare_data(batch_size=32, max_samples=10000)
 
 # Load the trained model if it exists, otherwise train
 model_path = 'best_model.pt'
@@ -46,6 +47,7 @@ def get_recommendations(user_id):
         return jsonify(data)
     except Exception as e:
         print(f"Full error: {str(e)}")  # Print full error details
+        print(f"Stack trace:\n{traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 

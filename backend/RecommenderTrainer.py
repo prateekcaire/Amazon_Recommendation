@@ -51,7 +51,7 @@ class RecommenderTrainer:
         self.model = None
         self.optimizer = None
 
-    def prepare_data(self, batch_size: int = 32, max_samples: int = 1000):
+    def prepare_data(self, batch_size: int = 32, max_samples: int = 10000):
         self.logger.info("Preparing graph data...")
         self.graph = create_graph(batch_size=batch_size, max_samples=max_samples)
         self.graph = self.graph.to(self.device)
@@ -325,7 +325,7 @@ if __name__ == "__main__":
     )
 
     # Prepare data
-    trainer.prepare_data(batch_size=32, max_samples=1000)
+    trainer.prepare_data(batch_size=32, max_samples=10000)
 
     # Train model
     trainer.train(num_epochs=100)

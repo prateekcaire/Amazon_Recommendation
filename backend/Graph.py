@@ -139,7 +139,7 @@ class GraphBuilder:
         return metadata
 
 
-def create_graph(batch_size: int = 32, max_samples: int = 1000) -> HeteroData:
+def create_graph(batch_size: int = 32, max_samples: int = 10000) -> HeteroData:
     """
     Convenience function to create the graph in one step
     Args:
