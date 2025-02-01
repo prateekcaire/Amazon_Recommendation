@@ -41,17 +41,27 @@ class RecommenderTrainer:
         self.dropout = dropout
         self.lr = lr
         self.weight_decay = weight_decay
-        self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+        self.logger = logging.getLogger(__name__)
+        if device:
+            self.device = device
+        else:
+            if torch.backends.mps.is_available():
+                self.device = 'mps'  # Use Metal Performance Shaders for M1
+            elif torch.cuda.is_available():
+                self.device = 'cuda'  # Fall back to CUDA if available
+            else:
+                self.device = 'cpu'  # Use CPU as last resort
+
+        self.logger.info(f"Using device: {self.device}")
 
         # Initialize logging
         logging.basicConfig(level=logging.INFO)
-        self.logger = logging.getLogger(__name__)
 
         self.graph = None
         self.model = None
         self.optimizer = None
 
-    def prepare_data(self, batch_size: int = 32, max_samples: int = 10000):
+    def prepare_data(self, batch_size: int = 32, max_samples: int = 1000):
         self.logger.info("Preparing graph data...")
         self.graph = create_graph(batch_size=batch_size, max_samples=max_samples)
         self.graph = self.graph.to(self.device)
@@ -106,7 +116,6 @@ class RecommenderTrainer:
         """Train for one epoch"""
         self.model.train()
 
-        # CHANGE: Added debug logging for input verification
         self.logger.info(f"Available node types before forward pass: {list(self.graph.keys())}")
         self.logger.info(f"User features shape: {self.graph['user'].x.shape}")
 
@@ -325,7 +334,7 @@ if __name__ == "__main__":
     )
 
     # Prepare data
-    trainer.prepare_data(batch_size=32, max_samples=10000)
+    trainer.prepare_data(batch_size=32, max_samples=1000)
 
     # Train model
     trainer.train(num_epochs=100)

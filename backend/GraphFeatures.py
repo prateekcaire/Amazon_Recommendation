@@ -1,6 +1,8 @@
+import hashlib
 import os
 import pickle
 import random
+import time
 
 import numpy as np
 import pandas as pd
@@ -13,11 +15,18 @@ import torch.nn.functional as F
 
 
 class FeatureGenerator:
-    def __init__(self, batch_size: int = 32, max_samples: int = 10000):
+    def __init__(self, batch_size: int = 32, max_samples: int = 1000):
         # Original initialization
         self.batch_size = batch_size
         self.max_samples = max_samples
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        self.cache_dir = "./embedding_cache"
+        os.makedirs(self.cache_dir, exist_ok=True)
+
+        self.tokenizer = None
+        self.model = None
+        self.scaler = StandardScaler()
 
         # Add mappings as class attributes
         self.user_to_index = {}
@@ -26,7 +35,6 @@ class FeatureGenerator:
 
         # Initialize other attributes
         self.setup_data()
-        self.setup_models()
         self.category_embeddings = {}
 
     def setup_data(self):
@@ -57,29 +65,52 @@ class FeatureGenerator:
             meta_configs = [c for c in all_configs if c.startswith('raw_meta_')]
             review_configs = [c for c in all_configs if c.startswith('raw_review_')]
 
-            # Load and process meta dataset
-            self.meta_dataset = concatenate_datasets([
-                load_dataset(
+            review_datasets = []
+            for c in review_configs[:6]:
+                dataset = load_dataset(
                     'McAuley-Lab/Amazon-Reviews-2023',
                     c,
                     split='full',
                     trust_remote_code=True,
                     cache_dir=cache_dir
-                )
-                for c in meta_configs[:6]
-            ]).select(range(self.max_samples))
+                ).select(range(self.max_samples))
+                review_datasets.append(dataset)
 
-            # Load and process review dataset
-            self.review_dataset = concatenate_datasets([
-                load_dataset(
+            initial_review_data = concatenate_datasets(review_datasets)
+
+            product_ids = set()
+            for review in initial_review_data:
+                product_ids.add(review['parent_asin'])
+            print(f"Found {len(product_ids)} unique products in reviews")
+
+            meta_datasets = []
+            for c in meta_configs[:6]:
+                dataset = load_dataset(
                     'McAuley-Lab/Amazon-Reviews-2023',
                     c,
                     split='full',
                     trust_remote_code=True,
                     cache_dir=cache_dir
                 )
-                for c in review_configs[:6]
-            ]).select(range(self.max_samples))
+                filtered_dataset = dataset.filter(lambda x: x['parent_asin'] in product_ids)
+                if len(filtered_dataset) > self.max_samples:
+                    filtered_dataset = filtered_dataset.select(range(self.max_samples))
+                meta_datasets.append(filtered_dataset)
+                print(f"Loaded {len(filtered_dataset)} products with reviews from {c}")
+
+            meta_data = concatenate_datasets(meta_datasets)
+
+            valid_products = set(meta_data['parent_asin'])
+            print(f"Final count of products with both reviews and metadata: {len(valid_products)}")
+
+            self.review_dataset = initial_review_data.filter(lambda x: x['parent_asin'] in valid_products)
+            self.meta_dataset = meta_data
+
+            final_review_products = set(self.review_dataset['parent_asin'])
+            final_meta_products = set(self.meta_dataset['parent_asin'])
+            print(f"Verification - Products in reviews: {len(final_review_products)}")
+            print(f"Verification - Products in metadata: {len(final_meta_products)}")
+            print(f"Verification - Products overlap: {len(final_review_products.intersection(final_meta_products))}")
 
             # Save processed datasets to cache
             print("Saving processed datasets to cache...")
@@ -100,27 +131,87 @@ class FeatureGenerator:
         except Exception as e:
             raise RuntimeError(f"Failed to load BERT model: {str(e)}")
 
+    def _init_bert_if_needed(self):
+        """CHANGE: Lazy initialization of BERT models to save memory when using cache"""
+        if self.tokenizer is None:
+            self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+        if self.model is None:
+            self.model = AutoModel.from_pretrained('bert-base-uncased').to(self.device)
+
+    def _get_cache_path(self, text: str) -> str:
+        """CHANGE: Generate cache file path for a given text"""
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        return os.path.join(self.cache_dir, f"{text_hash}.npy")
+
     def get_bert_embeddings(self, texts: List[str]) -> np.ndarray:
-        """Get BERT embeddings in batches"""
+        """CHANGE: Modified to use caching for BERT embeddings"""
+        start_time = time.time()
         embeddings = []
-        for i in range(0, len(texts), self.batch_size):
-            batch_texts = texts[i:i + self.batch_size]
-            inputs = self.tokenizer(batch_texts,
-                                    return_tensors='pt',
-                                    max_length=128,
-                                    padding=True,
-                                    truncation=True).to(self.device)
+        texts_to_process = []
+        cache_indices = []
 
-            with torch.no_grad():
-                outputs = self.model(**inputs)
+        for idx, text in enumerate(texts):
+            cache_path = self._get_cache_path(text)
+            if os.path.exists(cache_path):
+                # Load from cache
+                embedding = np.load(cache_path)
+                embeddings.append(embedding)
+            else:
+                # Mark for processing
+                texts_to_process.append(text)
+                cache_indices.append(idx)
 
-            batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
-            embeddings.append(batch_embeddings)
+        if texts_to_process:
+            self._init_bert_if_needed()
 
+            new_embeddings = []
+            for i in range(0, len(texts_to_process), self.batch_size):
+                batch_texts = texts_to_process[i:i + self.batch_size]
+                inputs = self.tokenizer(
+                    batch_texts,
+                    return_tensors='pt',
+                    max_length=128,
+                    padding=True,
+                    truncation=True
+                ).to(self.device)
+
+                with torch.no_grad():
+                    outputs = self.model(**inputs)
+
+                batch_embeddings = outputs.last_hidden_state.mean(dim=1).cpu().numpy()
+                new_embeddings.append(batch_embeddings)
+
+            new_embeddings = np.vstack(new_embeddings)
+            for idx, (text, embedding) in enumerate(zip(texts_to_process, new_embeddings)):
+                cache_path = self._get_cache_path(text)
+                np.save(cache_path, embedding)
+                embeddings.append(embedding)
+
+        # Ensure embeddings are in the original order
+        if cache_indices:
+            final_embeddings = []
+            next_new_idx = 0
+            for i in range(len(texts)):
+                if i in cache_indices:
+                    final_embeddings.append(embeddings[len(embeddings) - len(cache_indices) + next_new_idx])
+                    next_new_idx += 1
+                else:
+                    final_embeddings.append(embeddings[next_new_idx])
+            embeddings = final_embeddings
+
+        # print(f"BERT embedding generation/loading took: {time.time() - start_time:.2f} seconds")
         return np.vstack(embeddings)
+
+    def clear_embedding_cache(self):
+        """CHANGE: Add method to clear the embedding cache if needed"""
+        for filename in os.listdir(self.cache_dir):
+            if filename.endswith('.npy'):
+                os.remove(os.path.join(self.cache_dir, filename))
+        print("Embedding cache cleared")
 
     def generate_user_features(self) -> Tuple[np.ndarray, Dict]:
         """Generate user features and mapping"""
+        start_time = time.time()
         review_df = pd.DataFrame(self.review_dataset)
 
         # Print debug info
@@ -150,10 +241,12 @@ class FeatureGenerator:
             feat['verified_purchase_ratio']
         ] for feat in user_features.values()])
 
+        print(f"User feature generation took: {time.time() - start_time:.2f} seconds")
         return self.scaler.fit_transform(feature_matrix), user_to_index
 
     def generate_product_features(self) -> Tuple[np.ndarray, Dict]:
         """Generate product features and mapping"""
+        start_time = time.time()
         meta_df = pd.DataFrame(self.meta_dataset)
         product_features = {}
         product_to_index = {}
@@ -183,7 +276,7 @@ class FeatureGenerator:
                     'description_emb': self.get_bert_embeddings([' '.join(meta['description'] or [])]),
                     'features_emb': self.get_bert_embeddings([' '.join(meta['features'] or [])])
                 }
-
+        print(f"Product feature generation took: {time.time() - start_time:.2f} seconds")
         return self._combine_product_features(product_features), product_to_index
 
     def _combine_product_features(self, product_features: Dict) -> np.ndarray:
@@ -212,14 +305,19 @@ class FeatureGenerator:
 
         return combined_features
 
-    # CHANGE: Add new method to generate category features
     def generate_category_features(self) -> Tuple[np.ndarray, Dict]:
         """
         Generate category node features and mapping
         Returns:
             Tuple[np.ndarray, Dict]: Category features and category-to-index mapping
         """
+        start_time = time.time()
         meta_df = pd.DataFrame(self.meta_dataset)
+
+        # Replace None with a default category or filter out
+        meta_df['main_category'] = meta_df['main_category'].fillna('Uncategorized')
+        # Alternative: meta_df = meta_df[meta_df['main_category'].notna()]
+
         category_features = {}
         category_to_index = {}
 
@@ -246,6 +344,8 @@ class FeatureGenerator:
                 ])[0]
             }
 
+        self.category_to_index = category_to_index
+
         # Combine numerical and text features
         feature_matrix = np.array([
             np.concatenate([
@@ -253,10 +353,9 @@ class FeatureGenerator:
                 feat['text_embedding']
             ]) for feat in category_features.values()
         ])
-
+        print(f"Category feature generation took: {time.time() - start_time:.2f} seconds")
         return self.scaler.fit_transform(feature_matrix), category_to_index
 
-    # CHANGE: Add method to generate category-category edges
     def generate_category_connectivity(self) -> Dict[str, torch.Tensor]:
         """
         Generate edges between related categories based on item similarity and user behavior
@@ -266,7 +365,8 @@ class FeatureGenerator:
         meta_df = pd.DataFrame(self.meta_dataset)
         review_df = pd.DataFrame(self.review_dataset)
 
-        # CHANGE: Create category co-occurrence matrix based on user purchase patterns
+        meta_df['main_category'] = meta_df['main_category'].fillna('Uncategorized')
+
         category_cooccurrence = np.zeros((len(self.category_to_index), len(self.category_to_index)))
 
         # Group reviews by user to find category co-occurrences

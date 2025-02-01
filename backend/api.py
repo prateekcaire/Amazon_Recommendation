@@ -17,7 +17,7 @@ trainer = RecommenderTrainer(
 )
 
 # Prepare data without training
-trainer.prepare_data(batch_size=32, max_samples=10000)
+trainer.prepare_data(batch_size=32, max_samples=1000)
 
 # Load the trained model if it exists, otherwise train
 model_path = 'best_model.pt'

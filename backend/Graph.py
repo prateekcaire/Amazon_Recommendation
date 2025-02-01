@@ -38,7 +38,6 @@ class GraphBuilder:
         # Generate all features
         user_features, user_mapping = self.feature_generator.generate_user_features()
         product_features, product_mapping = self.feature_generator.generate_product_features()
-        # CHANGE: Generate category features and mappings
         category_features, category_mapping = self.feature_generator.generate_category_features()
         # Create reverse mapping (index to category name)
         index_to_category = {idx: category for category, idx in category_mapping.items()}
@@ -46,7 +45,6 @@ class GraphBuilder:
 
         edge_features = self.feature_generator.generate_edge_features()
         edge_connectivity = self.feature_generator.generate_edge_connectivity()
-        # CHANGE: Get category connectivity
         category_connectivity = self.feature_generator.generate_category_connectivity()
 
         target_labels = self.feature_generator.generate_target_labels()
@@ -62,7 +60,6 @@ class GraphBuilder:
         # Convert features to PyTorch tensors
         self.graph['user'].x = torch.FloatTensor(user_features)
         self.graph['item'].x = torch.FloatTensor(product_features)
-        # CHANGE: Add category node features
         self.graph['category'].x = torch.FloatTensor(category_features)
 
         # Add edge connectivity and features for user-item edges
@@ -72,11 +69,9 @@ class GraphBuilder:
         # Add edge connectivity for item-item edges
         self.graph['item', 'related_to', 'item'].edge_index = edge_connectivity['item_item']
 
-        # CHANGE: Add edges between items and their categories
         item_to_category_edges = self._create_item_category_edges(product_mapping, category_mapping)
         self.graph['item', 'belongs_to', 'category'].edge_index = item_to_category_edges
 
-        # CHANGE: Add edges between related categories
         self.graph['category', 'related_to', 'category'].edge_index = category_connectivity
 
         # Add target labels
@@ -86,12 +81,10 @@ class GraphBuilder:
         # Add metadata
         self.graph.num_user_nodes = len(user_mapping)
         self.graph.num_item_nodes = len(product_mapping)
-        # CHANGE: Add category metadata
         self.graph.num_category_nodes = len(category_mapping)
 
         return self.graph
 
-    # CHANGE: Add helper method to create item-category edges
     def _create_item_category_edges(self, product_mapping: Dict, category_mapping: Dict) -> torch.Tensor:
         """
         Create edges between items and their categories
@@ -124,7 +117,6 @@ class GraphBuilder:
         metadata = {
             'num_users': graph.num_user_nodes,
             'num_items': graph.num_item_nodes,
-            # CHANGE: Add category-related metadata
             'num_categories': graph.num_category_nodes,
             'num_user_features': graph['user'].x.shape[1],
             'num_item_features': graph['item'].x.shape[1],
@@ -132,14 +124,13 @@ class GraphBuilder:
             'num_edge_features': graph['user', 'rates', 'item'].edge_attr.shape[1],
             'num_user_item_edges': graph['user', 'rates', 'item'].edge_index.shape[1],
             'num_item_item_edges': graph['item', 'related_to', 'item'].edge_index.shape[1],
-            # CHANGE: Add new edge type counts
             'num_item_category_edges': graph['item', 'belongs_to', 'category'].edge_index.shape[1],
             'num_category_category_edges': graph['category', 'related_to', 'category'].edge_index.shape[1]
         }
         return metadata
 
 
-def create_graph(batch_size: int = 32, max_samples: int = 10000) -> HeteroData:
+def create_graph(batch_size: int = 32, max_samples: int = 1000) -> HeteroData:
     """
     Convenience function to create the graph in one step
     Args:
