@@ -6,15 +6,9 @@ from RecommenderTrainer import RecommenderTrainer
 
 def train_and_save_model():
     print("Checking available devices...")
-    if torch.backends.mps.is_available():
-        print("MPS (Metal Performance Shaders) is available - will use M1 GPU")
-        device = 'mps'
-    elif torch.cuda.is_available():
-        print("CUDA is available - will use NVIDIA GPU")
-        device = 'cuda'
-    else:
-        print("No GPU available - will use CPU")
-        device = 'cpu'
+    # Force CPU usage instead of MPS
+    device = 'cpu'
+    print("Using CPU for training")
 
     print("Initializing trainer...")
     trainer = RecommenderTrainer(
