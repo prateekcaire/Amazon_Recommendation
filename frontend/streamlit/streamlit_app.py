@@ -1,16 +1,14 @@
-import subprocess
-import sys
-
 import streamlit as st
 import requests
-import pandas as pd
+import subprocess
+import sys
+import os
 from typing import Dict
 
 
 def load_recommendations(user_id: int = 0):
     """Fetch recommendations from existing API service"""
     try:
-        # Use the existing API endpoint from api.py
         response = requests.get(f'http://127.0.0.1:5000/api/recommendations/{user_id}')
         if response.status_code == 200:
             return response.json()
@@ -23,40 +21,106 @@ def load_recommendations(user_id: int = 0):
         return None
 
 
-def style_product_card(product: Dict):
-    st.markdown(
-        f"""
-        <div style="
+def style_category_container():
+    return """
+        <style>
+        .category-container {
+            margin-bottom: 2rem;
+        }
+        .product-scroll {
+            display: flex;
+            overflow-x: auto;
+            padding: 1rem 0;
+            scroll-behavior: smooth;
+        }
+        .product-scroll::-webkit-scrollbar {
+            height: 8px;
+        }
+        .product-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .product-scroll::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        .product-scroll::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .product-card {
+            flex: 0 0 auto;
+            width: 280px;
+            margin-right: 1rem;
+            padding: 1rem;
             border: 1px solid #ddd;
             border-radius: 8px;
-            padding: 10px;
-            margin: 10px 0;
-            background-color: white;
-        ">
-            <img src="{product['image_url'] or 'https://via.placeholder.com/150'}" 
-                 style="width: 100%; height: 200px; object-fit: cover; border-radius: 4px;">
-            <h3 style="margin: 10px 0; font-size: 1rem;">{product['title'][:50]}...</h3>
-            <div style="color: #f1c40f; font-size: 1.2rem;">{'⭐' * int(product['rating'])}</div>
-            <div style="color: #2ecc71; font-size: 1.4rem; font-weight: bold; margin-top: 5px;">
-                ${product['price']}
+            background: white;
+        }
+        .product-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+        .product-title {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            height: 3em;
+            overflow: hidden;
+        }
+        .product-rating {
+            color: #f1c40f;
+            margin-bottom: 0.5rem;
+        }
+        .product-price {
+            color: #2ecc71;
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+        </style>
+    """
+
+
+def create_product_card(product: Dict) -> str:
+    return f"""
+        <div class="product-card">
+            <img src="{product['image_url'] or 'https://via.placeholder.com/280x200'}" 
+                 class="product-image" 
+                 alt="{product['title']}">
+            <div class="product-title">{product['title'][:50]}...</div>
+            <div class="product-rating">{'⭐' * int(product['rating'])}</div>
+            <div class="product-price">${product['price']:.2f}</div>
+        </div>
+    """
+
+
+def create_category_section(category_name: str, products: list) -> str:
+    products_html = ''.join(create_product_card(product) for product in products)
+    return f"""
+        <div class="category-container">
+            <h2 style="margin-bottom: 1rem; font-size: 1.5rem;">📦 {category_name}</h2>
+            <div class="product-scroll">
+                {products_html}
             </div>
         </div>
-        """,
-        unsafe_allow_html=True
-    )
+    """
 
 
-def create_recommendation_app():
-    st.markdown(
-        """
+def main():
+    st.set_page_config(page_title="Product Recommendations", layout="wide")
+
+    # Custom CSS for the app
+    st.markdown("""
         <style>
         .stApp {
             background-color: #f8f9fa;
         }
+        .main {
+            padding: 1rem;
+        }
         </style>
-        """,
-        unsafe_allow_html=True
-    )
+    """, unsafe_allow_html=True)
 
     st.title("🛍️ Smart Product Recommendations")
 
@@ -74,11 +138,15 @@ def create_recommendation_app():
         st.error("Unable to load recommendations. Please make sure api.py is running.")
         return
 
+    # Add the custom CSS for category container
+    st.markdown(style_category_container(), unsafe_allow_html=True)
+
+    # Create all category sections
+    all_categories_html = []
     for category_id, product_ids in data["recommendations"].items():
         category_name = data["metadata"]["categories"][category_id]
-        st.header(f"📦 {category_name}")
 
-        # Filter products
+        # Filter products based on user criteria
         filtered_products = [
             data["metadata"]["products"][str(pid)]
             for pid in product_ids
@@ -87,27 +155,27 @@ def create_recommendation_app():
                and price_range[0] <= data["metadata"]["products"][str(pid)]["price"] <= price_range[1]
         ]
 
-        if not filtered_products:
-            st.warning("No products match your filters in this category.")
-            continue
+        if filtered_products:
+            category_html = create_category_section(category_name, filtered_products)
+            all_categories_html.append(category_html)
 
-        cols = st.columns(3)
-        for idx, product in enumerate(filtered_products):
-            with cols[idx % 3]:
-                style_product_card(product)
+    # Combine all categories and display
+    st.markdown(''.join(all_categories_html), unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
-    subprocess.run([
-        sys.executable, "-m", "streamlit", "run",
-        __file__,
-        "--server.port=8501",
-        "--server.address=localhost"
-    ])
+    # Get the current script directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    st.set_page_config(
-        page_title="Product Recommendations",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-    create_recommendation_app()
+    # Change to the script directory
+    os.chdir(script_dir)
+
+    # Run streamlit command
+    cmd = [sys.executable, '-m', 'streamlit', 'run', __file__,
+           '--server.port=8501', '--server.address=localhost']
+
+    if not os.environ.get('STREAMLIT_RUN_MODE'):
+        os.environ['STREAMLIT_RUN_MODE'] = 'true'
+        subprocess.run(cmd)
+    else:
+        main()
