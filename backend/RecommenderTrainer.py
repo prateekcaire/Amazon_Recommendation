@@ -42,15 +42,9 @@ class RecommenderTrainer:
         self.lr = lr
         self.weight_decay = weight_decay
         self.logger = logging.getLogger(__name__)
-        if device:
-            self.device = device
-        else:
-            if torch.backends.mps.is_available():
-                self.device = 'mps'  # Use Metal Performance Shaders for M1
-            elif torch.cuda.is_available():
-                self.device = 'cuda'  # Fall back to CUDA if available
-            else:
-                self.device = 'cpu'  # Use CPU as last resort
+        # Force CPU usage instead of MPS
+        self.device = 'cpu'
+        print("Using CPU for training")
 
         self.logger.info(f"Using device: {self.device}")
 
