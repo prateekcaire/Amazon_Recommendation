@@ -808,6 +808,235 @@ classDiagram
 | Attention Computation | O(E * H * F) | O(E * H) | Per layer |
 | Recommendation Generation | O(U * I) | O(U * K) | U = users, I = items, K = top-k recommendations |
 
+## Model Architecture
+
+### 1. GAT Layers Implementation
+
+The HeteroGAT implementation consists of multiple specialized layers:
+
+```python
+class HeteroGAT(nn.Module):
+    def __init__(
+        self,
+        in_channels_dict: Dict[str, int],
+        hidden_channels: int,
+        out_channels: int,
+        num_categories: int,
+        num_layers: int = 2,
+        heads: int = 4,
+        dropout: float = 0.2,
+        edge_types: List[Tuple[str, str, str]] = None
+    ):
+        super().__init__()
+        self.convs = nn.ModuleList()
+        # First layer
+        self.convs.append(
+            HeteroGATConv(
+                in_channels_dict=in_channels_dict,
+                out_channels=hidden_channels,
+                heads=heads,
+                dropout=dropout,
+                edge_types=edge_types
+            )
+        )
+        # Hidden layers
+        for _ in range(num_layers - 2):
+            hidden_channels_dict = {node_type: hidden_channels for node_type in in_channels_dict}
+            self.convs.append(
+                HeteroGATConv(
+                    in_channels_dict=hidden_channels_dict,
+                    out_channels=hidden_channels,
+                    heads=heads,
+                    dropout=dropout,
+                    edge_types=edge_types
+                )
+            )
+```
+
+### 2. Multi-head Attention
+
+The multi-head attention mechanism is implemented in the HeteroGATConv class:
+
+```python
+class HeteroGATConv(MessagePassing):
+    def message(
+        self,
+        x_i: torch.Tensor,
+        x_j: torch.Tensor,
+        att: torch.Tensor,
+        edge_type: str,
+        index: torch.Tensor,
+        size_i: Optional[int]
+    ) -> torch.Tensor:
+        # Concatenate source and target features
+        x = torch.cat([x_i, x_j], dim=-1)
+        
+        # Compute attention scores
+        alpha = (x * att).sum(dim=-1)
+        alpha = F.leaky_relu(alpha, self.negative_slope)
+        alpha = softmax(alpha, index, num_nodes=size_i)
+        alpha = F.dropout(alpha, p=self.dropout, training=self.training)
+        
+        return x_j * alpha.unsqueeze(-1)
+```
+
+### Feature Transformation
+
+Feature transformation is handled through multiple components:
+
+```python
+class RatingScaler(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        # Scale from [0,1] to [1,5]
+        return 4 * x + 1
+
+# Rating prediction pathway
+self.rating_predictor = nn.Sequential(
+    nn.Linear(out_channels, 32),
+    nn.ReLU(),
+    nn.Dropout(dropout),
+    nn.Linear(32, 1),
+    nn.Sigmoid(),
+    RatingScaler()
+)
+
+# Category prediction pathway
+self.category_predictor = nn.Sequential(
+    nn.Linear(out_channels, hidden_channels),
+    nn.ReLU(),
+    nn.Dropout(dropout),
+    nn.Linear(hidden_channels, num_categories)
+)
+```
+
+### Loss Functions
+
+The model uses multiple loss functions for different tasks:
+
+```python
+# Rating prediction loss
+self.rating_criterion = nn.MSELoss()
+
+# Category prediction loss
+self.category_criterion = nn.CrossEntropyLoss()
+
+# Combined loss computation
+def compute_loss(rating_pred, category_pred, rating_true, category_true):
+    rating_loss = rating_criterion(rating_pred, rating_true)
+    category_loss = category_criterion(category_pred, category_true)
+    
+    # Weighted combination
+    alpha, beta = 0.5, 1.0
+    total_loss = alpha * rating_loss + beta * category_loss
+    return total_loss
+```
+
+### Model Architecture Diagram
+
+```mermaid
+flowchart TD
+    subgraph Input[Input Layer]
+        U[User Features]
+        I[Item Features]
+        C[Category Features]
+    end
+
+    subgraph GAT1[GAT Layer 1]
+        direction LR
+        MHA1[Multi-Head Attention]
+        AGG1[Feature Aggregation]
+        TRANS1[Transform]
+    end
+
+    subgraph GAT2[GAT Layer 2]
+        direction LR
+        MHA2[Multi-Head Attention]
+        AGG2[Feature Aggregation]
+        TRANS2[Transform]
+    end
+
+    subgraph Output[Output Layer]
+        RP[Rating Predictor]
+        CP[Category Predictor]
+    end
+
+    U --> GAT1
+    I --> GAT1
+    C --> GAT1
+    
+    MHA1 --> AGG1
+    AGG1 --> TRANS1
+    
+    GAT1 --> GAT2
+    
+    MHA2 --> AGG2
+    AGG2 --> TRANS2
+    
+    GAT2 --> RP
+    GAT2 --> CP
+
+    style Input fill:#f9f,stroke:#333,stroke-width:2px
+    style GAT1 fill:#bbf,stroke:#333,stroke-width:2px
+    style GAT2 fill:#bbf,stroke:#333,stroke-width:2px
+    style Output fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+### Layer-wise Visualization
+
+```mermaid
+graph TD
+    subgraph "Layer 1: Input Processing"
+        I1[Input Features] --> E1[Embedding Layer]
+        E1 --> N1[Normalization]
+    end
+    
+    subgraph "Layer 2: Message Passing"
+        A1[Attention Weights] --> M1[Message Creation]
+        M1 --> AG1[Aggregation]
+    end
+    
+    subgraph "Layer 3: Feature Transformation"
+        T1[Linear Transform] --> D1[Dropout]
+        D1 --> R1[ReLU]
+    end
+    
+    subgraph "Layer 4: Prediction Heads"
+        P1[Rating Head] & P2[Category Head]
+    end
+    
+    N1 --> A1
+    AG1 --> T1
+    R1 --> P1
+    R1 --> P2
+```
+
+### Attention Visualization
+
+```mermaid
+graph TD
+    subgraph "Multi-Head Attention"
+        H1[Head 1]
+        H2[Head 2]
+        H3[Head 3]
+        H4[Head 4]
+        
+        Q1[Query] --> H1 & H2 & H3 & H4
+        K1[Key] --> H1 & H2 & H3 & H4
+        V1[Value] --> H1 & H2 & H3 & H4
+        
+        H1 & H2 & H3 & H4 --> C[Concatenate]
+        C --> P[Project]
+    end
+```
+
+### Parameter Count and Model Size Analysis
+
+- Total Parameters: 813,342 
+- Trainable Parameters: 813,342
+- Model Size: 3.10 MB
 
 ### Implementation Best Practices
 

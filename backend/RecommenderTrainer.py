@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from sklearn.metrics import mean_squared_error, accuracy_score
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 import logging
 from tqdm import tqdm
 
@@ -106,6 +106,40 @@ class RecommenderTrainer:
         self.rating_criterion = nn.MSELoss()
         self.category_criterion = nn.CrossEntropyLoss()
 
+        # Get and log model statistics
+        self.get_model_stats()
+
+    def get_model_stats(self) -> Dict[str, Any]:
+        """Calculate model statistics and memory usage"""
+        if self.model is None:
+            self.logger.warning("Model not initialized. Call setup_model() first.")
+            return {}
+
+        total_params = sum(p.numel() for p in self.model.parameters())
+        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+
+        layer_params = {}
+        for name, module in self.model.named_modules():
+            if hasattr(module, 'weight'):
+                layer_params[name] = module.weight.numel()
+
+        stats = {
+            'total_parameters': total_params,
+            'trainable_parameters': trainable_params,
+            'layer_parameters': layer_params,
+            'model_size_mb': total_params * 4 / (1024 * 1024),  # Assuming float32
+            'device': str(next(self.model.parameters()).device)
+        }
+
+        # Log the statistics
+        self.logger.info(f"Model Statistics:")
+        self.logger.info(f"Total Parameters: {stats['total_parameters']:,}")
+        self.logger.info(f"Trainable Parameters: {stats['trainable_parameters']:,}")
+        self.logger.info(f"Model Size: {stats['model_size_mb']:.2f} MB")
+        self.logger.info(f"Device: {stats['device']}")
+
+        return stats
+
     def train_epoch(self) -> Tuple[float, float]:
         """Train for one epoch"""
         self.model.train()
@@ -203,6 +237,9 @@ class RecommenderTrainer:
         if self.model is None:
             self.setup_model()
 
+        self.logger.info("Initial model statistics:")
+        self.get_model_stats()
+
         best_val_loss = float('inf')
         patience_counter = 0
 
@@ -239,6 +276,9 @@ class RecommenderTrainer:
                     if patience_counter >= early_stopping_patience:
                         self.logger.info("Early stopping triggered!")
                         break
+
+        self.logger.info("Final model statistics:")
+        self.get_model_stats()
 
     def generate_recommendations(
         self,
