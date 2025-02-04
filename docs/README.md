@@ -484,68 +484,68 @@ def validate_category(category_data):
 
 ### Data Distribution Analysis
 
-Our system's data distributions provide insights into category coverage, rating patterns, and user activity levels. Here are the key distributions:
+Our system's data distributions provide insights into category coverage, rating patterns, and user activity levels.
 
 #### Category Distribution
-The product catalog is distributed across five main categories:
-- Electronics: 2,854 items (27.2%)
-- Books: 2,960 items (28.2%)
-- Clothing: 1,854 items (17.7%)
-- Home & Kitchen: 1,654 items (15.8%)
-- Sports: 1,243 items (11.1%)
+
+```mermaid
+pie title Product Category Distribution
+    "Electronics (2854)" : 2854
+    "Books (2960)" : 2960
+    "Clothing (1854)" : 1854
+    "Home & Kitchen (1654)" : 1654
+    "Sports (1243)" : 1243
+```
 
 #### Rating Distribution
-The rating distribution shows a strong positive bias:
-- 5★: 1,800 ratings
-- 4★: 2,500 ratings
-- 3★: 1,200 ratings
-- 2★: 350 ratings
-- 1★: 150 ratings
+
+```mermaid
+bar
+    title Product Rating Distribution
+    axis left 0->3000 "Number of Ratings"
+    axis bottom "Rating Stars"
+    1★ 150
+    2★ 350
+    3★ 1200
+    4★ 2500
+    5★ 1800
+```
 
 #### User Activity Distribution
-User engagement levels vary significantly:
-- 1-5 interactions: 5,000 users
-- 6-10 interactions: 3,000 users
-- 11-20 interactions: 1,500 users
-- 21-50 interactions: 800 users
-- 50+ interactions: 200 users
 
-The visualization component can be integrated using the following React code:
+```mermaid
+bar
+    title User Activity Distribution
+    axis left 0->6000 "Number of Users"
+    axis bottom "Activity Range"
+    "1-5" 5000
+    "6-10" 3000
+    "11-20" 1500
+    "21-50" 800
+    "50+" 200
+```
 
-```jsx
-import React from 'react';
-import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-    Tooltip, Legend, ResponsiveContainer, PieChart, 
-    Pie, Cell 
-} from 'recharts';
+#### Distribution Analysis Summary
 
-const DataDistributionDashboard = () => {
-  const categoryData = [
-    { name: 'Electronics', count: 2854 },
-    { name: 'Books', count: 2960 },
-    { name: 'Clothing', count: 1854 },
-    { name: 'Home & Kitchen', count: 1654 },
-    { name: 'Sports', count: 1243 }
-  ];
+1. **Category Distribution**:
+   - Books leads with 2,960 items (28.2%)
+   - Electronics follows with 2,854 items (27.2%)
+   - Clothing has 1,854 items (17.7%)
+   - Home & Kitchen contains 1,654 items (15.8%)
+   - Sports has 1,243 items (11.1%)
 
-  const ratingDistribution = [
-    { rating: '1 ★', count: 150 },
-    { rating: '2 ★', count: 350 },
-    { rating: '3 ★', count: 1200 },
-    { rating: '4 ★', count: 2500 },
-    { rating: '5 ★', count: 1800 }
-  ];
+2. **Rating Distribution**:
+   - Most products receive 4★ ratings (2,500)
+   - Strong positive bias with high 5★ count (1,800)
+   - Moderate 3★ ratings (1,200)
+   - Lower numbers of negative ratings (2★: 350, 1★: 150)
 
-  const userActivityData = [
-    { activity: '1-5', users: 5000 },
-    { activity: '6-10', users: 3000 },
-    { activity: '11-20', users: 1500 },
-    { activity: '21-50', users: 800 },
-    { activity: '50+', users: 200 }
-  ];
-
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+3. **User Activity Patterns**:
+   - Majority of users (5,000) have 1-5 interactions
+   - Active users (6-10 interactions): 3,000
+   - Very active users (11-20 interactions): 1,500
+   - Power users (21-50 interactions): 800
+   - Super users (50+ interactions): 200
 ```
 
 ### Future Enhancements
