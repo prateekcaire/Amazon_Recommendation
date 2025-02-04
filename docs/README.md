@@ -500,29 +500,43 @@ pie title Product Category Distribution
 #### Rating Distribution
 
 ```mermaid
-bar
-    title Product Rating Distribution
-    axis left 0->3000 "Number of Ratings"
-    axis bottom "Rating Stars"
-    1★ 150
-    2★ 350
-    3★ 1200
-    4★ 2500
-    5★ 1800
+graph TD
+    subgraph Rating Distribution
+    style RD fill:#f9f9f9,stroke:#666,stroke-width:2px
+    R1[1★: 150 ratings]
+    R2[2★: 350 ratings]
+    R3[3★: 1200 ratings]
+    R4[4★: 2500 ratings]
+    R5[5★: 1800 ratings]
+    end
+
+    %% Style for the nodes
+    style R1 fill:#fee,stroke:#999
+    style R2 fill:#fed,stroke:#999
+    style R3 fill:#fec,stroke:#999
+    style R4 fill:#feb,stroke:#999
+    style R5 fill:#fea,stroke:#999
 ```
 
 #### User Activity Distribution
 
 ```mermaid
-bar
-    title User Activity Distribution
-    axis left 0->6000 "Number of Users"
-    axis bottom "Activity Range"
-    "1-5" 5000
-    "6-10" 3000
-    "11-20" 1500
-    "21-50" 800
-    "50+" 200
+graph TD
+    subgraph User Activity Levels
+    style UA fill:#f9f9f9,stroke:#666,stroke-width:2px
+    UA1[1-5 interactions: 5000 users]
+    UA2[6-10 interactions: 3000 users]
+    UA3[11-20 interactions: 1500 users]
+    UA4[21-50 interactions: 800 users]
+    UA5[50+ interactions: 200 users]
+    end
+
+    %% Style for the nodes
+    style UA1 fill:#e1f7e1,stroke:#999
+    style UA2 fill:#c3efc3,stroke:#999
+    style UA3 fill:#a5e7a5,stroke:#999
+    style UA4 fill:#87df87,stroke:#999
+    style UA5 fill:#69d769,stroke:#999
 ```
 
 #### Distribution Analysis Summary
