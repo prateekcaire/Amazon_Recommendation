@@ -6,22 +6,16 @@
 ## Table of Contents
 - [Introduction](#introduction)
 - [System Architecture](#system-architecture)
-- [Data Model and Knowledge Graph](#data-model-and-knowledge-graph)
-- [Technical Implementation](#technical-implementation)
 - [Model Architecture](#model-architecture)
 - [Training Process](#training-process)
-- [Evaluation and Results](#evaluation-and-results)
-- [User Interface](#user-interface)
-- [Deployment and Scaling](#deployment-and-scaling)
-- [Future Improvements](#future-improvements)
-- [Technical Challenges and Solutions](#technical-challenges-and-solutions)
-- [Conclusion](#conclusion)
+- [Data Model and Knowledge Graph](#data-model-and-knowledge-graph)
+- [Technical Implementation](#technical-implementation)
 
 ## Introduction
 
 ### Problem Statement and Motivation
 
-E-commerce platforms face significant challenges in providing personalized product recommendations due to several key factors:
+Personalized product recommendations key factors:
 
 1. **Complex Product Relationships**: The implemented system deals with a diverse product catalog where items are interconnected through various relationships (categories, brands, features) as evident from the `GraphBuilder` class which handles multi-type relationships between products.
 
@@ -33,7 +27,7 @@ E-commerce platforms face significant challenges in providing personalized produ
 
 ### Overview of Recommendation Systems
 
-The implemented system represents a modern approach to recommendation systems, combining several key methodologies:
+Key methodologies used for implementation:
 
 1. **Content-Based Filtering**: 
    - Uses BERT embeddings to understand product descriptions and titles
@@ -52,8 +46,6 @@ The implemented system represents a modern approach to recommendation systems, c
 
 ### Why Graph-Based Approaches are Effective
 
-The code implementation demonstrates several advantages of graph-based approaches:
-
 1. **Natural Representation**: 
    - The `Graph.py` implementation shows how naturally the system represents various entities (users, items, categories) and their relationships
    - Captures both explicit (user-item interactions) and implicit (item-item similarities) relationships
@@ -68,7 +60,7 @@ The code implementation demonstrates several advantages of graph-based approache
    - Easy to add new types of nodes or edges
    - Can incorporate both structural and feature-based information
 
-### Brief Introduction to Heterogeneous Graphs and GNNs
+### Heterogeneous Graphs and GNNs
 
 #### Heterogeneous Graphs
 
@@ -261,6 +253,358 @@ sequenceDiagram
 Each component is designed to be modular and maintainable, with clear interfaces for interaction with other components. The system follows a layered architecture pattern, allowing for independent scaling and updates of different components while maintaining system stability and performance.
 
 The architecture emphasizes efficient data flow and processing, with particular attention to memory management and computational optimization through caching and batch processing. The heterogeneous graph structure serves as the core data representation, enabling complex relationships between different entities to be captured and utilized for generating recommendations.
+
+## Model Architecture
+
+### 1. GAT Layers Implementation
+
+The HeteroGAT implementation consists of multiple specialized layers:
+
+```python
+class HeteroGAT(nn.Module):
+    def __init__(
+        self,
+        in_channels_dict: Dict[str, int],
+        hidden_channels: int,
+        out_channels: int,
+        num_categories: int,
+        num_layers: int = 2,
+        heads: int = 4,
+        dropout: float = 0.2,
+        edge_types: List[Tuple[str, str, str]] = None
+    ):
+        super().__init__()
+        self.convs = nn.ModuleList()
+        # First layer
+        self.convs.append(
+            HeteroGATConv(
+                in_channels_dict=in_channels_dict,
+                out_channels=hidden_channels,
+                heads=heads,
+                dropout=dropout,
+                edge_types=edge_types
+            )
+        )
+        # Hidden layers
+        for _ in range(num_layers - 2):
+            hidden_channels_dict = {node_type: hidden_channels for node_type in in_channels_dict}
+            self.convs.append(
+                HeteroGATConv(
+                    in_channels_dict=hidden_channels_dict,
+                    out_channels=hidden_channels,
+                    heads=heads,
+                    dropout=dropout,
+                    edge_types=edge_types
+                )
+            )
+```
+
+### 2. Multi-head Attention
+
+The multi-head attention mechanism is implemented in the HeteroGATConv class:
+
+```python
+class HeteroGATConv(MessagePassing):
+    def message(
+        self,
+        x_i: torch.Tensor,
+        x_j: torch.Tensor,
+        att: torch.Tensor,
+        edge_type: str,
+        index: torch.Tensor,
+        size_i: Optional[int]
+    ) -> torch.Tensor:
+        # Concatenate source and target features
+        x = torch.cat([x_i, x_j], dim=-1)
+        
+        # Compute attention scores
+        alpha = (x * att).sum(dim=-1)
+        alpha = F.leaky_relu(alpha, self.negative_slope)
+        alpha = softmax(alpha, index, num_nodes=size_i)
+        alpha = F.dropout(alpha, p=self.dropout, training=self.training)
+        
+        return x_j * alpha.unsqueeze(-1)
+```
+
+### Feature Transformation
+
+Feature transformation is handled through multiple components:
+
+```python
+class RatingScaler(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        # Scale from [0,1] to [1,5]
+        return 4 * x + 1
+
+# Rating prediction pathway
+self.rating_predictor = nn.Sequential(
+    nn.Linear(out_channels, 32),
+    nn.ReLU(),
+    nn.Dropout(dropout),
+    nn.Linear(32, 1),
+    nn.Sigmoid(),
+    RatingScaler()
+)
+
+# Category prediction pathway
+self.category_predictor = nn.Sequential(
+    nn.Linear(out_channels, hidden_channels),
+    nn.ReLU(),
+    nn.Dropout(dropout),
+    nn.Linear(hidden_channels, num_categories)
+)
+```
+
+### Loss Functions
+
+The model uses multiple loss functions for different tasks:
+
+```python
+# Rating prediction loss
+self.rating_criterion = nn.MSELoss()
+
+# Category prediction loss
+self.category_criterion = nn.CrossEntropyLoss()
+
+# Combined loss computation
+def compute_loss(rating_pred, category_pred, rating_true, category_true):
+    rating_loss = rating_criterion(rating_pred, rating_true)
+    category_loss = category_criterion(category_pred, category_true)
+    
+    # Weighted combination
+    alpha, beta = 0.5, 1.0
+    total_loss = alpha * rating_loss + beta * category_loss
+    return total_loss
+```
+
+### Model Architecture Diagram
+
+```mermaid
+flowchart TD
+    subgraph Input[Input Layer]
+        U[User Features]
+        I[Item Features]
+        C[Category Features]
+    end
+
+    subgraph GAT1[GAT Layer 1]
+        direction LR
+        MHA1[Multi-Head Attention]
+        AGG1[Feature Aggregation]
+        TRANS1[Transform]
+    end
+
+    subgraph GAT2[GAT Layer 2]
+        direction LR
+        MHA2[Multi-Head Attention]
+        AGG2[Feature Aggregation]
+        TRANS2[Transform]
+    end
+
+    subgraph Output[Output Layer]
+        RP[Rating Predictor]
+        CP[Category Predictor]
+    end
+
+    U --> GAT1
+    I --> GAT1
+    C --> GAT1
+    
+    MHA1 --> AGG1
+    AGG1 --> TRANS1
+    
+    GAT1 --> GAT2
+    
+    MHA2 --> AGG2
+    AGG2 --> TRANS2
+    
+    GAT2 --> RP
+    GAT2 --> CP
+
+    style Input fill:#f9f,stroke:#333,stroke-width:2px
+    style GAT1 fill:#bbf,stroke:#333,stroke-width:2px
+    style GAT2 fill:#bbf,stroke:#333,stroke-width:2px
+    style Output fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+### Layer-wise Visualization
+
+```mermaid
+graph TD
+    subgraph "Layer 1: Input Processing"
+        I1[Input Features] --> E1[Embedding Layer]
+        E1 --> N1[Normalization]
+    end
+    
+    subgraph "Layer 2: Message Passing"
+        A1[Attention Weights] --> M1[Message Creation]
+        M1 --> AG1[Aggregation]
+    end
+    
+    subgraph "Layer 3: Feature Transformation"
+        T1[Linear Transform] --> D1[Dropout]
+        D1 --> R1[ReLU]
+    end
+    
+    subgraph "Layer 4: Prediction Heads"
+        P1[Rating Head] & P2[Category Head]
+    end
+    
+    N1 --> A1
+    AG1 --> T1
+    R1 --> P1
+    R1 --> P2
+```
+
+### Attention Visualization
+
+```mermaid
+graph TD
+    subgraph "Multi-Head Attention"
+        H1[Head 1]
+        H2[Head 2]
+        H3[Head 3]
+        H4[Head 4]
+        
+        Q1[Query] --> H1 & H2 & H3 & H4
+        K1[Key] --> H1 & H2 & H3 & H4
+        V1[Value] --> H1 & H2 & H3 & H4
+        
+        H1 & H2 & H3 & H4 --> C[Concatenate]
+        C --> P[Project]
+    end
+```
+
+### Parameter Count and Model Size Analysis
+
+- Total Parameters: 813,342 
+- Trainable Parameters: 813,342
+- Model Size: 3.10 MB
+
+### Implementation Best Practices
+
+#### Code Quality Standards
+1. Type Hints
+```python
+def generate_recommendations(
+    self,
+    user_id: int,
+    num_categories: int = 5,
+    items_per_category: int = 40
+) -> Dict[str, List[int]]:
+    """
+    Generate personalized recommendations for a user
+    """
+    pass
+```
+
+2. Error Handling
+```python
+def get_cached_features(self, text: str) -> Optional[np.ndarray]:
+    """
+    Retrieve cached features with proper error handling
+    """
+    try:
+        cache_key = self._get_cache_key(text)
+        if os.path.exists(self._get_cache_path(cache_key)):
+            return np.load(self._get_cache_path(cache_key))
+    except Exception as e:
+        logger.error(f"Cache retrieval failed: {str(e)}")
+        return None
+```
+
+3. Logging
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+class RecommenderTrainer:
+    def train(self, num_epochs: int):
+        logger.info(f"Starting training for {num_epochs} epochs")
+        for epoch in range(num_epochs):
+            loss = self.train_epoch()
+            logger.info(f"Epoch {epoch}: loss = {loss:.4f}")
+```
+
+### Performance Optimization Techniques
+#### 1. Caching System
+```python
+def get_embeddings(self, texts: List[str]) -> np.ndarray:
+    """
+    Get BERT embeddings with caching
+    """
+    cache_hits = []
+    texts_to_process = []
+    
+    for text in texts:
+        cached = self.get_cached_features(text)
+        if cached is not None:
+            cache_hits.append(cached)
+        else:
+            texts_to_process.append(text)
+            
+    if texts_to_process:
+        new_embeddings = self._generate_bert_embeddings(texts_to_process)
+        return np.vstack([*cache_hits, new_embeddings])
+    return np.vstack(cache_hits)
+```
+
+#### 2. Batch Processing
+```python
+def _generate_bert_embeddings(self, texts: List[str]) -> np.ndarray:
+    """
+    Generate BERT embeddings in batches
+    """
+    embeddings = []
+    for i in range(0, len(texts), self.batch_size):
+        batch_texts = texts[i:i + self.batch_size]
+        batch_embeddings = self._process_batch(batch_texts)
+        embeddings.append(batch_embeddings)
+    return np.vstack(embeddings)
+```
+
+### Key Features
+
+#### 1. Efficient Feature Generation
+   - BERT embeddings for text understanding
+   - Cached computation for performance
+   - Batch processing for scalability
+
+#### 2. Sophisticated Graph Structure
+   - Heterogeneous node types
+   - Multiple edge relationships
+   - Rich feature representations
+
+#### 3. Advanced Model Architecture
+   - Multi-head attention mechanism
+   - Message passing between different node types
+   - Layer-wise feature transformation
+
+#### 4. Robust Training Pipeline
+   - Early stopping mechanism
+   - Validation monitoring
+   - Model checkpointing
+
+#### 5. Production-Ready Implementation
+   - Error handling
+   - Logging
+   - Performance optimization
+   - Type safety
+
+### Core Components Implementation
+```python
+class GraphBuilder:
+    """Constructs heterogeneous graph from raw data"""
+    def __init__(self, feature_generator: FeatureGenerator):
+        self.feature_generator = feature_generator
+        self.graph = HeteroData()
+```
+
+<!-- TODO: Add sequence diagrams for key processes -->
 
 ## Data Model and Knowledge Graph
 
@@ -808,482 +1152,6 @@ classDiagram
 | Attention Computation | O(E * H * F) | O(E * H) | Per layer |
 | Recommendation Generation | O(U * I) | O(U * K) | U = users, I = items, K = top-k recommendations |
 
-## Model Architecture
-
-### 1. GAT Layers Implementation
-
-The HeteroGAT implementation consists of multiple specialized layers:
-
-```python
-class HeteroGAT(nn.Module):
-    def __init__(
-        self,
-        in_channels_dict: Dict[str, int],
-        hidden_channels: int,
-        out_channels: int,
-        num_categories: int,
-        num_layers: int = 2,
-        heads: int = 4,
-        dropout: float = 0.2,
-        edge_types: List[Tuple[str, str, str]] = None
-    ):
-        super().__init__()
-        self.convs = nn.ModuleList()
-        # First layer
-        self.convs.append(
-            HeteroGATConv(
-                in_channels_dict=in_channels_dict,
-                out_channels=hidden_channels,
-                heads=heads,
-                dropout=dropout,
-                edge_types=edge_types
-            )
-        )
-        # Hidden layers
-        for _ in range(num_layers - 2):
-            hidden_channels_dict = {node_type: hidden_channels for node_type in in_channels_dict}
-            self.convs.append(
-                HeteroGATConv(
-                    in_channels_dict=hidden_channels_dict,
-                    out_channels=hidden_channels,
-                    heads=heads,
-                    dropout=dropout,
-                    edge_types=edge_types
-                )
-            )
-```
-
-### 2. Multi-head Attention
-
-The multi-head attention mechanism is implemented in the HeteroGATConv class:
-
-```python
-class HeteroGATConv(MessagePassing):
-    def message(
-        self,
-        x_i: torch.Tensor,
-        x_j: torch.Tensor,
-        att: torch.Tensor,
-        edge_type: str,
-        index: torch.Tensor,
-        size_i: Optional[int]
-    ) -> torch.Tensor:
-        # Concatenate source and target features
-        x = torch.cat([x_i, x_j], dim=-1)
-        
-        # Compute attention scores
-        alpha = (x * att).sum(dim=-1)
-        alpha = F.leaky_relu(alpha, self.negative_slope)
-        alpha = softmax(alpha, index, num_nodes=size_i)
-        alpha = F.dropout(alpha, p=self.dropout, training=self.training)
-        
-        return x_j * alpha.unsqueeze(-1)
-```
-
-### Feature Transformation
-
-Feature transformation is handled through multiple components:
-
-```python
-class RatingScaler(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        # Scale from [0,1] to [1,5]
-        return 4 * x + 1
-
-# Rating prediction pathway
-self.rating_predictor = nn.Sequential(
-    nn.Linear(out_channels, 32),
-    nn.ReLU(),
-    nn.Dropout(dropout),
-    nn.Linear(32, 1),
-    nn.Sigmoid(),
-    RatingScaler()
-)
-
-# Category prediction pathway
-self.category_predictor = nn.Sequential(
-    nn.Linear(out_channels, hidden_channels),
-    nn.ReLU(),
-    nn.Dropout(dropout),
-    nn.Linear(hidden_channels, num_categories)
-)
-```
-
-### Loss Functions
-
-The model uses multiple loss functions for different tasks:
-
-```python
-# Rating prediction loss
-self.rating_criterion = nn.MSELoss()
-
-# Category prediction loss
-self.category_criterion = nn.CrossEntropyLoss()
-
-# Combined loss computation
-def compute_loss(rating_pred, category_pred, rating_true, category_true):
-    rating_loss = rating_criterion(rating_pred, rating_true)
-    category_loss = category_criterion(category_pred, category_true)
-    
-    # Weighted combination
-    alpha, beta = 0.5, 1.0
-    total_loss = alpha * rating_loss + beta * category_loss
-    return total_loss
-```
-
-### Model Architecture Diagram
-
-```mermaid
-flowchart TD
-    subgraph Input[Input Layer]
-        U[User Features]
-        I[Item Features]
-        C[Category Features]
-    end
-
-    subgraph GAT1[GAT Layer 1]
-        direction LR
-        MHA1[Multi-Head Attention]
-        AGG1[Feature Aggregation]
-        TRANS1[Transform]
-    end
-
-    subgraph GAT2[GAT Layer 2]
-        direction LR
-        MHA2[Multi-Head Attention]
-        AGG2[Feature Aggregation]
-        TRANS2[Transform]
-    end
-
-    subgraph Output[Output Layer]
-        RP[Rating Predictor]
-        CP[Category Predictor]
-    end
-
-    U --> GAT1
-    I --> GAT1
-    C --> GAT1
-    
-    MHA1 --> AGG1
-    AGG1 --> TRANS1
-    
-    GAT1 --> GAT2
-    
-    MHA2 --> AGG2
-    AGG2 --> TRANS2
-    
-    GAT2 --> RP
-    GAT2 --> CP
-
-    style Input fill:#f9f,stroke:#333,stroke-width:2px
-    style GAT1 fill:#bbf,stroke:#333,stroke-width:2px
-    style GAT2 fill:#bbf,stroke:#333,stroke-width:2px
-    style Output fill:#bfb,stroke:#333,stroke-width:2px
-```
-
-### Layer-wise Visualization
-
-```mermaid
-graph TD
-    subgraph "Layer 1: Input Processing"
-        I1[Input Features] --> E1[Embedding Layer]
-        E1 --> N1[Normalization]
-    end
-    
-    subgraph "Layer 2: Message Passing"
-        A1[Attention Weights] --> M1[Message Creation]
-        M1 --> AG1[Aggregation]
-    end
-    
-    subgraph "Layer 3: Feature Transformation"
-        T1[Linear Transform] --> D1[Dropout]
-        D1 --> R1[ReLU]
-    end
-    
-    subgraph "Layer 4: Prediction Heads"
-        P1[Rating Head] & P2[Category Head]
-    end
-    
-    N1 --> A1
-    AG1 --> T1
-    R1 --> P1
-    R1 --> P2
-```
-
-### Attention Visualization
-
-```mermaid
-graph TD
-    subgraph "Multi-Head Attention"
-        H1[Head 1]
-        H2[Head 2]
-        H3[Head 3]
-        H4[Head 4]
-        
-        Q1[Query] --> H1 & H2 & H3 & H4
-        K1[Key] --> H1 & H2 & H3 & H4
-        V1[Value] --> H1 & H2 & H3 & H4
-        
-        H1 & H2 & H3 & H4 --> C[Concatenate]
-        C --> P[Project]
-    end
-```
-
-### Parameter Count and Model Size Analysis
-
-- Total Parameters: 813,342 
-- Trainable Parameters: 813,342
-- Model Size: 3.10 MB
-
-### Implementation Best Practices
-
-#### Code Quality Standards
-1. Type Hints
-```python
-def generate_recommendations(
-    self,
-    user_id: int,
-    num_categories: int = 5,
-    items_per_category: int = 40
-) -> Dict[str, List[int]]:
-    """
-    Generate personalized recommendations for a user
-    """
-    pass
-```
-
-2. Error Handling
-```python
-def get_cached_features(self, text: str) -> Optional[np.ndarray]:
-    """
-    Retrieve cached features with proper error handling
-    """
-    try:
-        cache_key = self._get_cache_key(text)
-        if os.path.exists(self._get_cache_path(cache_key)):
-            return np.load(self._get_cache_path(cache_key))
-    except Exception as e:
-        logger.error(f"Cache retrieval failed: {str(e)}")
-        return None
-```
-
-3. Logging
-```python
-import logging
-
-logger = logging.getLogger(__name__)
-
-class RecommenderTrainer:
-    def train(self, num_epochs: int):
-        logger.info(f"Starting training for {num_epochs} epochs")
-        for epoch in range(num_epochs):
-            loss = self.train_epoch()
-            logger.info(f"Epoch {epoch}: loss = {loss:.4f}")
-```
-
-### Performance Optimization Techniques
-#### 1. Caching System
-```python
-def get_embeddings(self, texts: List[str]) -> np.ndarray:
-    """
-    Get BERT embeddings with caching
-    """
-    cache_hits = []
-    texts_to_process = []
-    
-    for text in texts:
-        cached = self.get_cached_features(text)
-        if cached is not None:
-            cache_hits.append(cached)
-        else:
-            texts_to_process.append(text)
-            
-    if texts_to_process:
-        new_embeddings = self._generate_bert_embeddings(texts_to_process)
-        return np.vstack([*cache_hits, new_embeddings])
-    return np.vstack(cache_hits)
-```
-
-#### 2. Batch Processing
-```python
-def _generate_bert_embeddings(self, texts: List[str]) -> np.ndarray:
-    """
-    Generate BERT embeddings in batches
-    """
-    embeddings = []
-    for i in range(0, len(texts), self.batch_size):
-        batch_texts = texts[i:i + self.batch_size]
-        batch_embeddings = self._process_batch(batch_texts)
-        embeddings.append(batch_embeddings)
-    return np.vstack(embeddings)
-```
-
-### Key Features
-
-#### 1. Efficient Feature Generation
-   - BERT embeddings for text understanding
-   - Cached computation for performance
-   - Batch processing for scalability
-
-#### 2. Sophisticated Graph Structure
-   - Heterogeneous node types
-   - Multiple edge relationships
-   - Rich feature representations
-
-#### 3. Advanced Model Architecture
-   - Multi-head attention mechanism
-   - Message passing between different node types
-   - Layer-wise feature transformation
-
-#### 4. Robust Training Pipeline
-   - Early stopping mechanism
-   - Validation monitoring
-   - Model checkpointing
-
-#### 5. Production-Ready Implementation
-   - Error handling
-   - Logging
-   - Performance optimization
-   - Type safety
-
-### Core Components Implementation
-```python
-class GraphBuilder:
-    """Constructs heterogeneous graph from raw data"""
-    def __init__(self, feature_generator: FeatureGenerator):
-        self.feature_generator = feature_generator
-        self.graph = HeteroData()
-```
-
-<!-- TODO: Add sequence diagrams for key processes -->
-
-## Model Architecture
-
-### GAT Implementation
-```python
-class HeteroGAT(nn.Module):
-    def __init__(self,
-                 in_channels_dict: Dict[str, int],
-                 hidden_channels: int,
-                 out_channels: int,
-                 num_layers: int = 2,
-                 heads: int = 4):
-        super().__init__()
-        # Implementation details...
-```
-
-<!-- TODO: Add model architecture diagram -->
-
-### Model Statistics
-- Parameters: <!-- TODO: Add parameter count -->
-- Layer Configuration: <!-- TODO: Add layer details -->
-- Attention Heads: 4
-
-## Training Process
-
-### Configuration
-```python
-training_config = {
-    'batch_size': 32,
-    'num_epochs': 100,
-    'learning_rate': 0.001,
-    'weight_decay': 5e-4
-}
-```
-
-<!-- TODO: Add training curves and metrics plots -->
-
-## Evaluation and Results
-
-<!-- TODO: Add all evaluation metrics and comparisons -->
-
-### Preliminary Results
-| Metric | Value |
-|--------|--------|
-| NDCG@10 | <!-- TODO --> |
-| MAP | <!-- TODO --> |
-| Category Accuracy | <!-- TODO --> |
-
-## User Interface
-
-### Streamlit Dashboard
-![Streamlit Interface](assets/streamlit.png)
-<!-- TODO: Add UI screenshots and flow diagrams -->
-
-## Deployment and Scaling
-
-<!-- TODO: Add deployment architecture and scaling strategies -->
-
-### Current Implementation
-```python
-app = Flask(__name__)
-trainer = RecommenderTrainer(
-    hidden_channels=64,
-    num_layers=2,
-    heads=4
-)
-```
-
-## Future Improvements
-
-### Planned Enhancements
-1. Real-time recommendation updates
-2. Enhanced feature engineering
-3. A/B testing framework
-4. Performance optimization
-
-## Technical Challenges and Solutions
-
-### Challenge 1: BERT Embedding Caching
-**Problem**: High computation cost for text embeddings
-**Solution**: Implemented MD5 hash-based caching system
-
-```python
-def _get_cache_key(self, text: str) -> str:
-    return hashlib.md5(text.encode()).hexdigest()
-```
-
-### Challenge 2: Memory Management
-**Problem**: Large graph storage
-**Solution**: Batch processing and efficient data structures
-
-## Conclusion
-
-### Key Achievements
-1. Implemented heterogeneous GNN
-2. Developed caching system
-3. Created interactive UI
-
-### Next Steps
-1. <!-- TODO: Add concrete next steps -->
-
-## Getting Started
-
-### Prerequisites
-- Python 3.8+
-- PyTorch 1.9+
-- CUDA-capable GPU (recommended)
-
-### Installation
-```bash
-git clone https://github.com/yourusername/graph-recommender.git
-cd graph-recommender
-pip install -r requirements.txt
-```
-
-### Running the System
-```bash
-python train.py
-streamlit run streamlit_app.py
-```
-
-## References and Citations
-1. <!-- TODO: Add relevant papers and resources -->
-
----
 
 <div align="center">
 Made with ❤️ by [Prateek Caire]
