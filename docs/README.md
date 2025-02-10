@@ -646,7 +646,7 @@ torch.save(self.model.state_dict(), 'best_model.pt')
 ### Training Metrics and Analysis
 
 #### Training Visualization
-![Training Metrics Over Time](training_curves.png)
+![Training Metrics Over Time](../backend/training_curves.png)
 
 The visualization above shows four key aspects of training:
 1. **Loss Curves**: Training loss and validation MSE over epochs
