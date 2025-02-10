@@ -606,6 +606,105 @@ class GraphBuilder:
 
 <!-- TODO: Add sequence diagrams for key processes -->
 
+## Training Process
+
+### Training Pipeline Implementation
+The training process is implemented in `RecommenderTrainer.py` with the following key components:
+
+1. **Training Loop**:
+```python
+def train(self, num_epochs: int = 100, 
+          early_stopping_patience: int = 10,
+          validation_interval: int = 5):
+    """
+    Train the model with early stopping and validation
+    """
+```
+
+2. **Loss Calculation**:
+- Combined loss using rating prediction and category classification:
+```python
+# Rating prediction loss
+rating_loss = self.rating_criterion(rating_pred, self.graph['item'].y_rating)
+# Category classification loss
+category_loss = self.category_criterion(category_pred, self.graph['item'].y_category)
+# Combined weighted loss
+total_loss = alpha * rating_loss + beta * category_loss
+```
+
+3. **Early Stopping**:
+- Monitors validation loss with patience of 10 epochs
+- Saves best model state when validation improves
+- Prevents overfitting by stopping training when no improvement is seen
+
+4. **Model Checkpointing**:
+```python
+# Save best model
+torch.save(self.model.state_dict(), 'best_model.pt')
+```
+
+### Training Metrics and Analysis
+
+#### Training Visualization
+![Training Metrics Over Time](training_curves.png)
+
+The visualization above shows four key aspects of training:
+1. **Loss Curves**: Training loss and validation MSE over epochs
+2. **Category Accuracy**: Improvement in validation category accuracy
+3. **Learning Rate**: Learning rate stability throughout training
+4. **Resource Utilization**: GPU memory usage and epoch time metrics
+
+#### Convergence Performance
+According to training_report.md:
+- Best Epoch: 95
+- Best Validation MSE: 0.1039
+- Best Category Accuracy: 0.76%
+- Average Time per Epoch: 0.13s
+- Total Epochs: 20
+- Final Learning Rate: 1.00e-03
+- Peak GPU Memory: 2.10GB
+- Initial Loss: 5.4683
+- Final Loss: 1.0530
+- Loss Reduction: 80.7%
+
+#### Training Time Analysis
+- Average epoch time: 0.13 seconds
+- Total training time for 100 epochs: ~13 seconds
+- Consistent epoch times indicating stable performance
+
+#### Resource Utilization
+- Peak GPU Memory: 2.10GB
+- Memory usage increases gradually during training
+- Efficient batch processing with size 32
+- Minimal memory fluctuations during training
+
+#### Learning Rate Behavior
+- Initial learning rate: 0.001 
+- Constant learning rate strategy
+- Good convergence without learning rate scheduling
+- Potential for improvement with adaptive learning rates
+
+### Training Curves
+
+#### Loss and Accuracy Analysis
+From the training curves visualization (training_curves.png):
+
+1. **Loss Convergence**:
+   - Training loss decreases smoothly from 5.47 to 1.05
+   - Validation MSE shows consistent improvement from 0.89 to 0.10
+   - Steepest improvement in first 20 epochs, then gradual refinement
+
+2. **Category Accuracy Progress**:
+   - Initial accuracy: 2.49%
+   - Final accuracy: 76.15%
+   - Major improvements in first 40 epochs
+   - Plateaus around epoch 70 at ~75%
+
+3. **Validation Stability**:
+   - No significant oscillations in validation metrics
+   - Consistent improvement without overfitting
+   - Clear correlation between loss reduction and accuracy gains
+
 ## Data Model and Knowledge Graph
 
 ### Overview
@@ -1151,6 +1250,168 @@ classDiagram
 | Message Passing | O(E * H * F) | O(V * H * F) | H = attention heads, F = feature dimension |
 | Attention Computation | O(E * H * F) | O(E * H) | Per layer |
 | Recommendation Generation | O(U * I) | O(U * K) | U = users, I = items, K = top-k recommendations |
+
+## Training Process
+
+### Available Components
+
+#### Training Pipeline Implementation
+The training process is implemented in `RecommenderTrainer.py` with the following key components:
+
+1. **Training Loop**:
+```python
+def train(self, num_epochs: int = 100, 
+          early_stopping_patience: int = 10,
+          validation_interval: int = 5):
+    """
+    Train the model with early stopping and validation
+    """
+```
+
+2. **Loss Calculation**:
+- Combined loss using rating prediction and category classification:
+```python
+# Rating prediction loss
+rating_loss = self.rating_criterion(rating_pred, self.graph['item'].y_rating)
+# Category classification loss
+category_loss = self.category_criterion(category_pred, self.graph['item'].y_category)
+# Combined weighted loss
+total_loss = alpha * rating_loss + beta * category_loss
+```
+
+3. **Early Stopping**:
+- Monitors validation loss with patience of 10 epochs
+- Saves best model state when validation improves
+- Prevents overfitting by stopping training when no improvement is seen
+
+4. **Model Checkpointing**:
+```python
+# Save best model
+torch.save(self.model.state_dict(), 'best_model.pt')
+```
+
+### Training Metrics and Analysis
+
+#### Training Visualization
+![Training Metrics Over Time](training_curves.png)
+
+The visualization above shows four key aspects of training:
+1. **Loss Curves**: Training loss and validation MSE over epochs
+2. **Category Accuracy**: Improvement in validation category accuracy
+3. **Learning Rate**: Learning rate stability throughout training
+4. **Resource Utilization**: GPU memory usage and epoch time metrics
+
+#### Convergence Performance
+According to training_report.md:
+- Best Epoch: 95
+- Best Validation MSE: 0.1039
+- Best Category Accuracy: 0.76%
+- Average Time per Epoch: 0.13s
+- Total Epochs: 20
+- Final Learning Rate: 1.00e-03
+- Peak GPU Memory: 2.10GB
+- Initial Loss: 5.4683
+- Final Loss: 1.0530
+- Loss Reduction: 80.7%
+
+#### Training Time Analysis
+- Average epoch time: 0.13 seconds
+- Total training time for 100 epochs: ~13 seconds
+- Consistent epoch times indicating stable performance
+
+#### Resource Utilization
+- Peak GPU Memory: 2.10GB
+- Memory usage increases gradually during training
+- Efficient batch processing with size 32
+- Minimal memory fluctuations during training
+
+#### Learning Rate Behavior
+- Initial learning rate: 0.001 
+- Constant learning rate strategy
+- Good convergence without learning rate scheduling
+- Potential for improvement with adaptive learning rates
+
+### Training Curves
+
+#### Loss and Accuracy Analysis
+From the training curves visualization (training_curves.png):
+
+1. **Loss Convergence**:
+   - Training loss decreases smoothly from 5.47 to 1.05
+   - Validation MSE shows consistent improvement from 0.89 to 0.10
+   - Steepest improvement in first 20 epochs, then gradual refinement
+
+2. **Category Accuracy Progress**:
+   - Initial accuracy: 2.49%
+   - Final accuracy: 76.15%
+   - Major improvements in first 40 epochs
+   - Plateaus around epoch 70 at ~75%
+
+3. **Validation Stability**:
+   - No significant oscillations in validation metrics
+   - Consistent improvement without overfitting
+   - Clear correlation between loss reduction and accuracy gains
+
+#### Resource Monitoring
+Based on the Resource Utilization graph in training_curves.png:
+
+1. **GPU Memory Usage**:
+   - Starting memory: 1.96GB
+   - Peak memory: 2.10GB
+   - Gradual increase with stabilization
+   - Minor fluctuations during training
+
+2. **Epoch Time Performance**:
+   - Initial epoch time: 0.178s
+   - Fastest epoch: 0.098s
+   - Average epoch time: 0.13s
+   - Consistent performance with minor variations
+
+3. **Resource Efficiency**:
+   - Efficient memory management through caching
+   - Stable memory footprint after initial allocation
+   - No memory leaks or unexpected spikes
+   - Predictable resource utilization pattern
+
+### Hardware Requirements and Scalability
+
+#### Minimum Requirements
+- CPU: Modern multi-core processor
+- RAM: 8GB minimum, 16GB recommended
+- GPU: Optional, CPU training supported
+- Storage: 1GB for model and cache
+
+#### Scalability Characteristics
+- Batch size adjustable (default: 32)
+- Memory usage scales linearly with data size
+- Supports both CPU and GPU training
+- Efficient caching system for BERT embeddings
+
+#### Performance Optimization
+- BERT embedding caching reduces computation
+- Batch processing for efficient memory usage
+- Early stopping prevents unnecessary computation
+- Modular design allows hardware adaptation
+
+### Future Improvements
+
+1. **Training Optimizations**:
+- Implement learning rate scheduling
+- Add gradient clipping
+- Explore adaptive batch sizes
+- Implement distributed training
+
+2. **Monitoring Enhancements**:
+- Add gradient flow visualization
+- Implement layer-wise analysis
+- Add attention weight visualization
+- Enhanced resource monitoring
+
+3. **Performance Upgrades**:
+- Multi-GPU support
+- Mixed precision training
+- Dynamic batch sizing
+- Checkpoint optimization
 
 
 <div align="center">

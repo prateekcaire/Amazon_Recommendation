@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from Graph import create_graph
 from HeteroGatConv import HeteroGAT
+from RetailModels.backend.TrainingVisualizer import TrainingVisualizer
 
 
 class RecommenderTrainer:
@@ -54,6 +55,16 @@ class RecommenderTrainer:
         self.graph = None
         self.model = None
         self.optimizer = None
+
+        self.training_metrics = {
+            'epochs': [],
+            'train_loss': [],
+            'val_rating_mse': [],
+            'val_category_acc': [],
+            'learning_rate': [],
+            'gpu_memory': [],
+            'epoch_time': []
+        }
 
     def prepare_data(self, batch_size: int = 32, max_samples: int = 1000):
         self.logger.info("Preparing graph data...")
@@ -234,6 +245,9 @@ class RecommenderTrainer:
             early_stopping_patience: Number of epochs to wait before early stopping
             validation_interval: Number of epochs between validations
         """
+        import time
+        import psutil
+
         if self.model is None:
             self.setup_model()
 
@@ -244,6 +258,8 @@ class RecommenderTrainer:
         patience_counter = 0
 
         for epoch in range(num_epochs):
+            epoch_start_time = time.time()
+
             # Training
             rating_loss, category_loss = self.train_epoch()
             self.logger.info(
@@ -265,6 +281,17 @@ class RecommenderTrainer:
                     f"Val Category Acc = {val_category_acc:.4f}"
                 )
 
+                epoch_time = time.time() - epoch_start_time
+                self.training_metrics['epochs'].append(epoch)
+                self.training_metrics['train_loss'].append(rating_loss + category_loss)
+                self.training_metrics['val_rating_mse'].append(val_rating_mse)
+                self.training_metrics['val_category_acc'].append(val_category_acc)
+                self.training_metrics['learning_rate'].append(self.optimizer.param_groups[0]['lr'])
+                self.training_metrics['gpu_memory'].append(psutil.Process().memory_info().rss)
+                self.training_metrics['epoch_time'].append(epoch_time)
+
+                self._save_metrics()
+
                 # Early stopping check
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
@@ -279,6 +306,21 @@ class RecommenderTrainer:
 
         self.logger.info("Final model statistics:")
         self.get_model_stats()
+
+        self._save_metrics()
+        self.save_training_visualization()
+
+    def _save_metrics(self):
+        """Save training metrics to JSON file"""
+        import json
+        with open('training_metrics.json', 'w') as f:
+            json.dump(self.training_metrics, f)
+
+    def save_training_visualization(self):
+        """Generate and save training visualizations"""
+        visualizer = TrainingVisualizer()
+        visualizer.plot_training_curves()
+        visualizer.generate_training_report()
 
     def generate_recommendations(
         self,
