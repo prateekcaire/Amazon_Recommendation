@@ -645,7 +645,7 @@ torch.save(self.model.state_dict(), 'best_model.pt')
 
 ### Training Metrics and Analysis
 
-#### Training Visualization
+### Training Visualization
 ![Training Metrics Over Time](../backend/training_curves.png)
 
 The visualization above shows four key aspects of training:
@@ -667,27 +667,7 @@ According to training_report.md:
 - Final Loss: 1.0530
 - Loss Reduction: 80.7%
 
-#### Training Time Analysis
-- Average epoch time: 0.13 seconds
-- Total training time for 100 epochs: ~13 seconds
-- Consistent epoch times indicating stable performance
-
-#### Resource Utilization
-- Peak GPU Memory: 2.10GB
-- Memory usage increases gradually during training
-- Efficient batch processing with size 32
-- Minimal memory fluctuations during training
-
-#### Learning Rate Behavior
-- Initial learning rate: 0.001 
-- Constant learning rate strategy
-- Good convergence without learning rate scheduling
-- Potential for improvement with adaptive learning rates
-
-### Training Curves
-
 #### Loss and Accuracy Analysis
-From the training curves visualization (training_curves.png):
 
 1. **Loss Convergence**:
    - Training loss decreases smoothly from 5.47 to 1.05
