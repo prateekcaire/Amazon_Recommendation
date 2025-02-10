@@ -25,6 +25,8 @@ Personalized product recommendations key factors:
 
 4. **Scalability Requirements**: The implementation includes an efficient caching system for BERT embeddings and batch processing capabilities, indicating the need to handle large-scale data efficiently.
 
+![Demo](../backend/Amazon_Recs_Gnn.mov)
+
 ### Overview of Recommendation Systems
 
 Key methodologies used for implementation:
