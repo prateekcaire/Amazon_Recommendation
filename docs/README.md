@@ -567,33 +567,6 @@ def _generate_bert_embeddings(self, texts: List[str]) -> np.ndarray:
     return np.vstack(embeddings)
 ```
 
-### Key Features
-
-#### 1. Efficient Feature Generation
-   - BERT embeddings for text understanding
-   - Cached computation for performance
-   - Batch processing for scalability
-
-#### 2. Sophisticated Graph Structure
-   - Heterogeneous node types
-   - Multiple edge relationships
-   - Rich feature representations
-
-#### 3. Advanced Model Architecture
-   - Multi-head attention mechanism
-   - Message passing between different node types
-   - Layer-wise feature transformation
-
-#### 4. Robust Training Pipeline
-   - Early stopping mechanism
-   - Validation monitoring
-   - Model checkpointing
-
-#### 5. Production-Ready Implementation
-   - Error handling
-   - Logging
-   - Performance optimization
-   - Type safety
 
 ### Core Components Implementation
 ```python
@@ -644,8 +617,6 @@ torch.save(self.model.state_dict(), 'best_model.pt')
 ```
 
 ### Training Metrics and Analysis
-
-### Training Visualization
 ![Training Metrics Over Time](../backend/training_curves.png)
 
 The visualization above shows four key aspects of training:
@@ -655,7 +626,6 @@ The visualization above shows four key aspects of training:
 4. **Resource Utilization**: GPU memory usage and epoch time metrics
 
 #### Convergence Performance
-According to training_report.md:
 - Best Epoch: 95
 - Best Validation MSE: 0.1039
 - Best Category Accuracy: 0.76%
