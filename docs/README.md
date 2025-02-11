@@ -258,130 +258,6 @@ The architecture emphasizes efficient data flow and processing, with particular 
 
 ## Model Architecture
 
-### 1. GAT Layers Implementation
-
-The HeteroGAT implementation consists of multiple specialized layers:
-
-```python
-class HeteroGAT(nn.Module):
-    def __init__(
-        self,
-        in_channels_dict: Dict[str, int],
-        hidden_channels: int,
-        out_channels: int,
-        num_categories: int,
-        num_layers: int = 2,
-        heads: int = 4,
-        dropout: float = 0.2,
-        edge_types: List[Tuple[str, str, str]] = None
-    ):
-        super().__init__()
-        self.convs = nn.ModuleList()
-        # First layer
-        self.convs.append(
-            HeteroGATConv(
-                in_channels_dict=in_channels_dict,
-                out_channels=hidden_channels,
-                heads=heads,
-                dropout=dropout,
-                edge_types=edge_types
-            )
-        )
-        # Hidden layers
-        for _ in range(num_layers - 2):
-            hidden_channels_dict = {node_type: hidden_channels for node_type in in_channels_dict}
-            self.convs.append(
-                HeteroGATConv(
-                    in_channels_dict=hidden_channels_dict,
-                    out_channels=hidden_channels,
-                    heads=heads,
-                    dropout=dropout,
-                    edge_types=edge_types
-                )
-            )
-```
-
-### 2. Multi-head Attention
-
-The multi-head attention mechanism is implemented in the HeteroGATConv class:
-
-```python
-class HeteroGATConv(MessagePassing):
-    def message(
-        self,
-        x_i: torch.Tensor,
-        x_j: torch.Tensor,
-        att: torch.Tensor,
-        edge_type: str,
-        index: torch.Tensor,
-        size_i: Optional[int]
-    ) -> torch.Tensor:
-        # Concatenate source and target features
-        x = torch.cat([x_i, x_j], dim=-1)
-        
-        # Compute attention scores
-        alpha = (x * att).sum(dim=-1)
-        alpha = F.leaky_relu(alpha, self.negative_slope)
-        alpha = softmax(alpha, index, num_nodes=size_i)
-        alpha = F.dropout(alpha, p=self.dropout, training=self.training)
-        
-        return x_j * alpha.unsqueeze(-1)
-```
-
-### Feature Transformation
-
-Feature transformation is handled through multiple components:
-
-```python
-class RatingScaler(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        # Scale from [0,1] to [1,5]
-        return 4 * x + 1
-
-# Rating prediction pathway
-self.rating_predictor = nn.Sequential(
-    nn.Linear(out_channels, 32),
-    nn.ReLU(),
-    nn.Dropout(dropout),
-    nn.Linear(32, 1),
-    nn.Sigmoid(),
-    RatingScaler()
-)
-
-# Category prediction pathway
-self.category_predictor = nn.Sequential(
-    nn.Linear(out_channels, hidden_channels),
-    nn.ReLU(),
-    nn.Dropout(dropout),
-    nn.Linear(hidden_channels, num_categories)
-)
-```
-
-### Loss Functions
-
-The model uses multiple loss functions for different tasks:
-
-```python
-# Rating prediction loss
-self.rating_criterion = nn.MSELoss()
-
-# Category prediction loss
-self.category_criterion = nn.CrossEntropyLoss()
-
-# Combined loss computation
-def compute_loss(rating_pred, category_pred, rating_true, category_true):
-    rating_loss = rating_criterion(rating_pred, rating_true)
-    category_loss = category_criterion(category_pred, category_true)
-    
-    # Weighted combination
-    alpha, beta = 0.5, 1.0
-    total_loss = alpha * rating_loss + beta * category_loss
-    return total_loss
-```
-
 ### Model Architecture Diagram
 
 ```mermaid
@@ -480,56 +356,128 @@ graph TD
     end
 ```
 
-### Parameter Count and Model Size Analysis
+### GAT Layers Implementation
 
-- Total Parameters: 813,342 
-- Trainable Parameters: 813,342
-- Model Size: 3.10 MB
+The HeteroGAT implementation consists of multiple specialized layers:
 
-### Implementation Best Practices
-
-#### Code Quality Standards
-1. Type Hints
 ```python
-def generate_recommendations(
-    self,
-    user_id: int,
-    num_categories: int = 5,
-    items_per_category: int = 40
-) -> Dict[str, List[int]]:
-    """
-    Generate personalized recommendations for a user
-    """
-    pass
+class HeteroGAT(nn.Module):
+    def __init__(
+        self,
+        in_channels_dict: Dict[str, int],
+        hidden_channels: int,
+        out_channels: int,
+        num_categories: int,
+        num_layers: int = 2,
+        heads: int = 4,
+        dropout: float = 0.2,
+        edge_types: List[Tuple[str, str, str]] = None
+    ):
+        super().__init__()
+        self.convs = nn.ModuleList()
+        # First layer
+        self.convs.append(
+            HeteroGATConv(
+                in_channels_dict=in_channels_dict,
+                out_channels=hidden_channels,
+                heads=heads,
+                dropout=dropout,
+                edge_types=edge_types
+            )
+        )
+        # Hidden layers
+        for _ in range(num_layers - 2):
+            hidden_channels_dict = {node_type: hidden_channels for node_type in in_channels_dict}
+            self.convs.append(
+                HeteroGATConv(
+                    in_channels_dict=hidden_channels_dict,
+                    out_channels=hidden_channels,
+                    heads=heads,
+                    dropout=dropout,
+                    edge_types=edge_types
+                )
+            )
 ```
 
-2. Error Handling
+### Multi-head Attention
+
+The multi-head attention mechanism is implemented in the HeteroGATConv class:
+
 ```python
-def get_cached_features(self, text: str) -> Optional[np.ndarray]:
-    """
-    Retrieve cached features with proper error handling
-    """
-    try:
-        cache_key = self._get_cache_key(text)
-        if os.path.exists(self._get_cache_path(cache_key)):
-            return np.load(self._get_cache_path(cache_key))
-    except Exception as e:
-        logger.error(f"Cache retrieval failed: {str(e)}")
-        return None
+class HeteroGATConv(MessagePassing):
+    def message(
+        self,
+        x_i: torch.Tensor,
+        x_j: torch.Tensor,
+        att: torch.Tensor,
+        edge_type: str,
+        index: torch.Tensor,
+        size_i: Optional[int]
+    ) -> torch.Tensor:
+        # Concatenate source and target features
+        x = torch.cat([x_i, x_j], dim=-1)
+        
+        # Compute attention scores
+        alpha = (x * att).sum(dim=-1)
+        alpha = F.leaky_relu(alpha, self.negative_slope)
+        alpha = softmax(alpha, index, num_nodes=size_i)
+        alpha = F.dropout(alpha, p=self.dropout, training=self.training)
+        
+        return x_j * alpha.unsqueeze(-1)
 ```
 
-3. Logging
+### Feature Transformation
+
+Feature transformation is handled through multiple components:
+
 ```python
-import logging
+class RatingScaler(nn.Module):
+    def __init__(self):
+        super().__init__()
 
-logger = logging.getLogger(__name__)
+    def forward(self, x):
+        # Scale from [0,1] to [1,5]
+        return 4 * x + 1
 
-class RecommenderTrainer:
-    def train(self, num_epochs: int):
-        logger.info(f"Starting training for {num_epochs} epochs")
-        for epoch in range(num_epochs):
-            loss = self.train_epoch()
-            logger.info(f"Epoch {epoch}: loss = {loss:.4f}")
+# Rating prediction pathway
+self.rating_predictor = nn.Sequential(
+    nn.Linear(out_channels, 32),
+    nn.ReLU(),
+    nn.Dropout(dropout),
+    nn.Linear(32, 1),
+    nn.Sigmoid(),
+    RatingScaler()
+)
+
+# Category prediction pathway
+self.category_predictor = nn.Sequential(
+    nn.Linear(out_channels, hidden_channels),
+    nn.ReLU(),
+    nn.Dropout(dropout),
+    nn.Linear(hidden_channels, num_categories)
+)
+```
+
+### Loss Functions
+
+The model uses multiple loss functions for different tasks:
+
+```python
+# Rating prediction loss
+self.rating_criterion = nn.MSELoss()
+
+# Category prediction loss
+self.category_criterion = nn.CrossEntropyLoss()
+
+# Combined loss computation
+def compute_loss(rating_pred, category_pred, rating_true, category_true):
+    rating_loss = rating_criterion(rating_pred, rating_true)
+    category_loss = category_criterion(category_pred, category_true)
+    
+    # Weighted combination
+    alpha, beta = 0.5, 1.0
+    total_loss = alpha * rating_loss + beta * category_loss
+    return total_loss
 ```
 
 ### Performance Optimization Techniques
@@ -568,18 +516,6 @@ def _generate_bert_embeddings(self, texts: List[str]) -> np.ndarray:
         embeddings.append(batch_embeddings)
     return np.vstack(embeddings)
 ```
-
-
-### Core Components Implementation
-```python
-class GraphBuilder:
-    """Constructs heterogeneous graph from raw data"""
-    def __init__(self, feature_generator: FeatureGenerator):
-        self.feature_generator = feature_generator
-        self.graph = HeteroData()
-```
-
-<!-- TODO: Add sequence diagrams for key processes -->
 
 ## Training Process
 
