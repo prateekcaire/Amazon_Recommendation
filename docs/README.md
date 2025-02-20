@@ -1,8 +1,5 @@
 # Building a Heterogeneous Graph Neural Network for E-commerce Recommendations
 
-![System Banner](assets/banner.png)
-<!-- TODO: Create and add a banner image showing the high-level system overview -->
-
 ## Table of Contents
 - [Introduction](#introduction)
 - [System Architecture](#system-architecture)
@@ -25,7 +22,7 @@ Personalized product recommendations key factors:
 
 4. **Scalability Requirements**: The implementation includes an efficient caching system for BERT embeddings and batch processing capabilities, indicating the need to handle large-scale data efficiently.
 
-![Demo](../backend/Amazon_Recs_Gnn.gif)
+![Demo](../backend/Amazon_Recs.gif)
 
 ### Overview of Recommendation Systems
 
