@@ -12,6 +12,28 @@
 
 ### Problem Statement and Motivation
 
+The recommendation system tackles the challenge of organizing and personalizing a large product catalog into an intuitive, user-friendly interface. Key aspects of the solution include:
+
+1. **Multi-Row Personalized Layout**: The system organizes recommendations into multiple category-based rows, with each row displaying up to 40 items. This structured presentation ensures both discoverability and manageability of the product catalog.
+
+2. **Dual-Level Ranking System**: 
+   - Category-level ranking determines the most relevant product categories for each user
+   - Item-level ranking within each category ensures the most appealing products appear first
+   - Both rankings are personalized based on user purchase history, impressions, and product ratings
+
+3. **Graph Neural Network Solution**: 
+   - Implements Graph Attention Network (GAT) architecture to capture complex relationships between users, items, and categories
+   - Leverages attention mechanisms to weight the importance of different user-item and item-category relationships
+   - Generates embeddings that effectively encode user preferences and item characteristics
+
+4. **Dynamic Personalization**: The system continuously adapts to user behavior by incorporating:
+   - Historical purchase patterns
+   - Product interaction data (impressions)
+   - Explicit feedback (ratings)
+   - Implicit relationships between products and categories
+
+![Demo](../backend/Amazon_Recs.gif)
+
 Personalized product recommendations key factors:
 
 1. **Complex Product Relationships**: The implemented system deals with a diverse product catalog where items are interconnected through various relationships (categories, brands, features) as evident from the `GraphBuilder` class which handles multi-type relationships between products.
@@ -22,7 +44,6 @@ Personalized product recommendations key factors:
 
 4. **Scalability Requirements**: The implementation includes an efficient caching system for BERT embeddings and batch processing capabilities, indicating the need to handle large-scale data efficiently.
 
-![Demo](../backend/Amazon_Recs.gif)
 
 ### Overview of Recommendation Systems
 
@@ -106,152 +127,6 @@ The implementation uses a sophisticated GNN architecture:
    - Updates node representations iteratively
 
 The system specifically uses the PyTorch Geometric framework for implementing these GNN components, allowing for efficient and scalable graph-based learning. The attention mechanism helps in determining the importance of different connections, making the recommendations more accurate and interpretable.
-
-## System Architecture
-
-### High-Level Overview
-```mermaid
-flowchart TD
-    subgraph DataSources[Data Sources]
-        A1[Amazon Reviews Dataset] --> B1
-        A2[Product Metadata] --> B1
-    end
-    
-    subgraph FeatureGen[Feature Generation]
-        B1[Raw Data Processing] --> B2[BERT Embeddings]
-        B2 --> B3[Feature Cache]
-        B3 --> B4[Feature Generator]
-    end
-    
-    subgraph GraphConst[Graph Construction]
-        C1[Graph Builder] --> C2[HeteroData Graph]
-        B4 --> C1
-    end
-    
-    subgraph ModelLayer[Model Layer]
-        D1[HeteroGAT Model] --> D2[Graph Attention]
-        D2 --> D3[Multi-head Attention]
-        C2 --> D1
-    end
-    
-    subgraph APIService[API Service]
-        E1[Flask API] --> E2[RecommenderTrainer]
-        D1 --> E2
-    end
-    
-    subgraph Frontend[Frontend]
-        F1[Streamlit UI] --> E1
-    end
-    B2 -->|Cached Embeddings| B3
-    C2 -->|Graph Data| D1
-    E2 -->|Recommendations| E1
-    E1 -->|JSON Response| F1
-    style DataSources fill:#f0f8ff
-    style FeatureGen fill:#f5f5dc
-    style GraphConst fill:#e6e6fa
-    style ModelLayer fill:#f0fff0
-    style APIService fill:#fff0f5
-    style Frontend fill:#ffe4e1
-```
-
-### Component Interactions
-```mermaid
-sequenceDiagram
-    participant UI as Streamlit UI
-    participant API as Flask API
-    participant RT as RecommenderTrainer
-    participant Model as HeteroGAT
-    participant Cache as Feature Cache
-    participant Graph as Graph Builder
-    
-    UI->>API: GET /recommendations/{user_id}
-    
-    API->>RT: generate_recommendations(user_id)
-    
-    RT->>Model: forward(x_dict, edge_index_dict)
-    
-    Model->>Graph: get graph data
-    Graph->>Cache: get cached features
-    Cache-->>Graph: return features
-    Graph-->>Model: return graph data
-    
-    Model->>Model: process through GAT layers
-    Model-->>RT: return embeddings
-    
-    RT->>RT: compute recommendations
-    RT-->>API: return recommended items
-    
-    API-->>UI: JSON response with recommendations
-    
-    Note over UI,API: User receives personalized recommendations
-    Note over Model,Graph: Uses heterogeneous graph attention
-    Note over Cache: BERT embeddings cached for efficiency 
-```
-
-### Components
-
-1. **Data Processing Layer**
-   - Raw data ingestion from Amazon Reviews Dataset
-   - Data cleaning and preprocessing
-   - Feature extraction and normalization
-   - Handling missing values and data validation
-   - Data sampling and filtering capabilities
-
-2. **Feature Generation Layer**
-   - BERT embeddings for text processing
-   - Efficient caching system for embeddings
-   - Feature normalization and scaling
-   - Batch processing for large-scale feature generation
-   - Memory-efficient processing pipeline
-
-3. **Graph Construction Layer**
-   - Heterogeneous graph building (HeteroData)
-   - Node type management (users, items, categories)
-   - Edge type handling (rates, belongs_to, related_to)
-   - Graph validation and optimization
-   - Feature integration into graph structure
-
-4. **Model Layer**
-   - HeteroGAT implementation
-   - Multi-head attention mechanisms
-   - Message passing between different node types
-   - Loss function computation
-   - Training and inference pipelines
-   - Model state management
-
-5. **API Service Layer**
-   - Flask REST API endpoints
-   - Request validation and processing
-   - Error handling and logging
-   - Response formatting
-   - Rate limiting and request queuing
-   - Cache management for responses
-
-6. **Frontend Layer**
-   - Streamlit dashboard implementation
-   - Interactive user interface
-   - Real-time filtering and sorting
-   - Category-based recommendation display
-   - Responsive design for different screen sizes
-   - Error handling and user feedback
-
-7. **Cache Management Layer**
-   - BERT embedding caching
-   - Feature cache management
-   - Cache invalidation strategies
-   - Memory optimization
-   - Efficient cache lookup mechanisms
-
-8. **Integration Layer**
-   - Component communication management
-   - Data format standardization
-   - Error propagation handling
-   - System state monitoring
-   - Cross-component optimization
-
-Each component is designed to be modular and maintainable, with clear interfaces for interaction with other components. The system follows a layered architecture pattern, allowing for independent scaling and updates of different components while maintaining system stability and performance.
-
-The architecture emphasizes efficient data flow and processing, with particular attention to memory management and computational optimization through caching and batch processing. The heterogeneous graph structure serves as the core data representation, enabling complex relationships between different entities to be captured and utilized for generating recommendations.
 
 ## Model Architecture
 
@@ -589,6 +464,152 @@ The visualization above shows four key aspects of training:
    - No significant oscillations in validation metrics
    - Consistent improvement without overfitting
    - Clear correlation between loss reduction and accuracy gains
+
+## System Architecture
+
+### High-Level Overview
+```mermaid
+flowchart TD
+    subgraph DataSources[Data Sources]
+        A1[Amazon Reviews Dataset] --> B1
+        A2[Product Metadata] --> B1
+    end
+    
+    subgraph FeatureGen[Feature Generation]
+        B1[Raw Data Processing] --> B2[BERT Embeddings]
+        B2 --> B3[Feature Cache]
+        B3 --> B4[Feature Generator]
+    end
+    
+    subgraph GraphConst[Graph Construction]
+        C1[Graph Builder] --> C2[HeteroData Graph]
+        B4 --> C1
+    end
+    
+    subgraph ModelLayer[Model Layer]
+        D1[HeteroGAT Model] --> D2[Graph Attention]
+        D2 --> D3[Multi-head Attention]
+        C2 --> D1
+    end
+    
+    subgraph APIService[API Service]
+        E1[Flask API] --> E2[RecommenderTrainer]
+        D1 --> E2
+    end
+    
+    subgraph Frontend[Frontend]
+        F1[Streamlit UI] --> E1
+    end
+    B2 -->|Cached Embeddings| B3
+    C2 -->|Graph Data| D1
+    E2 -->|Recommendations| E1
+    E1 -->|JSON Response| F1
+    style DataSources fill:#f0f8ff
+    style FeatureGen fill:#f5f5dc
+    style GraphConst fill:#e6e6fa
+    style ModelLayer fill:#f0fff0
+    style APIService fill:#fff0f5
+    style Frontend fill:#ffe4e1
+```
+
+### Component Interactions
+```mermaid
+sequenceDiagram
+    participant UI as Streamlit UI
+    participant API as Flask API
+    participant RT as RecommenderTrainer
+    participant Model as HeteroGAT
+    participant Cache as Feature Cache
+    participant Graph as Graph Builder
+    
+    UI->>API: GET /recommendations/{user_id}
+    
+    API->>RT: generate_recommendations(user_id)
+    
+    RT->>Model: forward(x_dict, edge_index_dict)
+    
+    Model->>Graph: get graph data
+    Graph->>Cache: get cached features
+    Cache-->>Graph: return features
+    Graph-->>Model: return graph data
+    
+    Model->>Model: process through GAT layers
+    Model-->>RT: return embeddings
+    
+    RT->>RT: compute recommendations
+    RT-->>API: return recommended items
+    
+    API-->>UI: JSON response with recommendations
+    
+    Note over UI,API: User receives personalized recommendations
+    Note over Model,Graph: Uses heterogeneous graph attention
+    Note over Cache: BERT embeddings cached for efficiency 
+```
+
+### Components
+
+1. **Data Processing Layer**
+   - Raw data ingestion from Amazon Reviews Dataset
+   - Data cleaning and preprocessing
+   - Feature extraction and normalization
+   - Handling missing values and data validation
+   - Data sampling and filtering capabilities
+
+2. **Feature Generation Layer**
+   - BERT embeddings for text processing
+   - Efficient caching system for embeddings
+   - Feature normalization and scaling
+   - Batch processing for large-scale feature generation
+   - Memory-efficient processing pipeline
+
+3. **Graph Construction Layer**
+   - Heterogeneous graph building (HeteroData)
+   - Node type management (users, items, categories)
+   - Edge type handling (rates, belongs_to, related_to)
+   - Graph validation and optimization
+   - Feature integration into graph structure
+
+4. **Model Layer**
+   - HeteroGAT implementation
+   - Multi-head attention mechanisms
+   - Message passing between different node types
+   - Loss function computation
+   - Training and inference pipelines
+   - Model state management
+
+5. **API Service Layer**
+   - Flask REST API endpoints
+   - Request validation and processing
+   - Error handling and logging
+   - Response formatting
+   - Rate limiting and request queuing
+   - Cache management for responses
+
+6. **Frontend Layer**
+   - Streamlit dashboard implementation
+   - Interactive user interface
+   - Real-time filtering and sorting
+   - Category-based recommendation display
+   - Responsive design for different screen sizes
+   - Error handling and user feedback
+
+7. **Cache Management Layer**
+   - BERT embedding caching
+   - Feature cache management
+   - Cache invalidation strategies
+   - Memory optimization
+   - Efficient cache lookup mechanisms
+
+8. **Integration Layer**
+   - Component communication management
+   - Data format standardization
+   - Error propagation handling
+   - System state monitoring
+   - Cross-component optimization
+
+Each component is designed to be modular and maintainable, with clear interfaces for interaction with other components. The system follows a layered architecture pattern, allowing for independent scaling and updates of different components while maintaining system stability and performance.
+
+The architecture emphasizes efficient data flow and processing, with particular attention to memory management and computational optimization through caching and batch processing. The heterogeneous graph structure serves as the core data representation, enabling complex relationships between different entities to be captured and utilized for generating recommendations.
 
 ## Data Model and Knowledge Graph
 
